@@ -1,5 +1,6 @@
 /* vim: set ft=c */
 #include "io.h"
+#include "svec.h"
 #include "tracing.h"
 #include <assert.h>
 #include <fcntl.h>
@@ -8,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+// SVEC_DECLAREP(uint8_t *, vu8);
+// SVEC_DECLARE(uint8_t, u8);
 
 #ifdef BF2IOMODE_BCF
 #include "htslib/synced_bcf_reader.h"
@@ -51,8 +54,8 @@ uint8_t DO_DUMP = 0;
       printf("%zu", (p)->a[pdump_j__]);                                        \
       fputc('|', stdout);                                                      \
       for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
-        printf("%zu ", (size_t)(i) + 1 - (p)->d[pdump_j__]);                           \
-      printf("%zu", (size_t)(i) + 1 - (p)->d[pdump_j__]);                              \
+        printf("%zu ", (size_t)(i) + 1 - (p)->d[pdump_j__]);                   \
+      printf("%zu", (size_t)(i) + 1 - (p)->d[pdump_j__]);                      \
       fputc(0xA, stdout);                                                      \
     }                                                                          \
   } while (0)
@@ -1467,25 +1470,32 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) { // BPR
 pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #if defined(BF2IOMODE_BCF)
   ncol = 0;
-  htsFile *fp = hts_open(fpath, "r");
-  if (fp) {
-    // Read the header to advance the file pointer to the data
-    bcf_hdr_t *h = bcf_hdr_read(fp);
-    if (h) {
-      bcf1_t *line = bcf_init();
+  bcf_srs_t *sr = bcf_sr_init();
+  bcf_sr_add_reader(sr, fpath);
 
-      // bcf_read is faster than bcf_sr_next_line as it skips
-      // synchronization logic and deep unpacking
-      while (bcf_read(fp, h, line) == 0) {
-        ncol++;
-      }
-
-      bcf_destroy(line);
-      bcf_hdr_destroy(h);
-    }
-    hts_close(fp);
+#if 0
+  svec_vu8 mrm = svec_vu8_init(1 << 8);
+  uint8_t *_r = calloc(nrow, sizeof *_r);
+  svec_vu8_a(&mrm, _r);
+  while (fgetcoli(sr, ncol, nrow, _r, 1)) {
+    _r = calloc(nrow, sizeof *_r);
+    svec_vu8_a(&mrm, _r);
+    ncol++;
   }
-  fprintf(stderr,"ncol_read:%zu\n", ncol);
+#else
+  svec_u8 *mrm = svec_u8_initp(nrow * 1 << 8);
+  uint8_t *_r = mrm->v;
+  while (fgetcoli(sr, ncol, nrow, _r, 1)) {
+    _r += nrow;
+    mrm->n += nrow;
+    if (mrm->n >= mrm->c) {
+      svec_u8_expand(mrm);
+      _r = mrm->v + nrow * ncol;
+    }
+    ncol++;
+  }
+#endif
+  fprintf(stderr, "ncol_read:%zu\n", ncol);
 #endif
 
   pbwtad **pb = malloc((W + 1) * sizeof(pbwtad *));
@@ -1513,20 +1523,19 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #error UNDEFINED BEHAVIOUR
 #endif
 
-  uint8_t *c0 = malloc(nrow * sizeof *c0);
-  fgetcoli(fin, 0, nrow, c0, ncol);
+  uint8_t *c0 = mgetcoli(mrm, 0, nrow);
   cpbwti(nrow, c0, pb[0], pb[1]);
   // PDUMP(0, pb[1]);
 
   for (size_t j = 1; j < W; j++) {
-    fgetcoli(fin, j, nrow, c0, ncol);
+    c0 = mgetcoli(mrm, j, nrow);
 
     cpbwti(nrow, c0, pb[j], pb[j + 1]);
 
     PDUMP(j, pb[j + 1]);
   }
-  for (size_t j = 0; j < W ; j++) {
-    swapdiv(pb[j], nrow, j-1);
+  for (size_t j = 0; j < W; j++) {
+    swapdiv(pb[j], nrow, j - 1);
   }
 
 #pragma omp parallel
@@ -1557,7 +1566,8 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
     size_t start = tid * base + (tid < rem ? tid : rem);
     size_t count = base + (tid < rem ? 1 : 0);
-    fprintf(stderr, ">>>%zu, %zu, %zu, %zu, %zu, %zu\n\n", tid, nthreads, base, rem, start, count);
+    fprintf(stderr, ">>>%zu, %zu, %zu, %zu, %zu, %zu\n\n", tid, nthreads, base,
+            rem, start, count);
     pbwtad *pt0 = pbwtad_new(nrow);
     pbwtad *pt0rev = pbwtad_new(nrow);
     pbwtad *pt1 = pbwtad_new(nrow);
@@ -1568,7 +1578,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     for (size_t offset = 0; offset < count; offset++) {
       size_t lane = start + offset;
       // initislization of the lane. pt0 should contain the previous iter
-      // value of pbwt. 
+      // value of pbwt.
       memcpy(pt0->a, pb[lane]->a, nrow * sizeof *(pb[lane]->a));
       memcpy(pt0->d, pb[lane]->d, nrow * sizeof *(pb[lane]->d));
 
@@ -1578,7 +1588,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
       for (size_t j = lane; j + W <= ncol; j += W) {
 
 #ifdef BF2IOMODE_BCF
-        lastrowread = fgetcolwgri(fin, j+0, nrow, pw, lastrowread, W);
+        mgetcolwgri(mrm, j + 0, nrow, pw, ncol, W);
 
 #else
         fgetcolwgri(fin, j, nrow, pw, ncol, W);
@@ -1596,7 +1606,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #ifdef DBDUMP
 #pragma omp critical
         {
-          PDUMPR(j + W -1, pt0);
+          PDUMPR(j + W - 1, pt0);
           // PDUMPR(j+W -1, pt1);
         }
 #endif
@@ -1614,7 +1624,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     FREE(aux);
     FREE(pw);
   }
-  FREE(c0);
+  // FREE(c0);
   return pb;
 }
 

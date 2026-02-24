@@ -2,13 +2,13 @@
 #ifndef BFPBWT_IO_H
 #define BFPBWT_IO_H
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <stdint.h>
 
 #define BFGETCOLI_BUF_SIZE 128
 #define BFGETCOLWR_BUF_SIZE 2
@@ -35,6 +35,14 @@ void fgetrc(void *fd, size_t *nr, size_t *nc);
 // nc is total number of columns
 int fgetcoli(void *fd, size_t i, size_t n, uint8_t *c, size_t nc);
 
+#include "svec.h"
+SVEC_DECLARE(uint8_t, u8);
+static inline uint8_t *mgetcoli(svec_u8 *mrm, size_t i, size_t n) {
+  return mrm->v + i*n;
+};
+
+#define mmgetcoli(mrm, i, n) ((mrm)->v + (i)*(n))
+
 // Buffered File GET COLumn Next
 // get next column, using buffered freads
 // c[n] is a pointer to store the column,
@@ -57,11 +65,11 @@ void mbfgetcoln(int fd, size_t n, uint8_t *c, size_t nc);
   void fgetcoliw##W(void *fd, size_t i, size_t n, uint64_t *c, size_t nc);     \
   void w##W##mrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,           \
                    uint64_t *c, size_t i);                                     \
-  int fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *c, size_t nc);  \
+  int fgetcoliw##W##r(void *fd, size_t i, size_t n, uint64_t *c, size_t nc);   \
   void wr##W##mrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,          \
                     uint64_t *c, size_t i);                                    \
   void bfgetcolw##W##rn(void *fd, size_t n, uint64_t *c, size_t nc);           \
-  int sbfgetcolw##W##rn(int fd, size_t n, uint64_t *c, size_t nc);            \
+  int sbfgetcolw##W##rn(int fd, size_t n, uint64_t *c, size_t nc);             \
   void sbfgetcolw##W##rn_mmap(int fd, size_t n, uint64_t *c, size_t nc);
 
 FGETCOLIW_DECLARE(8)
@@ -83,7 +91,7 @@ void fgetcoliwg(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
 // c[n] is a pointer to store the column,
 // nc is total number of columns
 int fgetcoliwgr(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
-                 uint8_t w);
+                uint8_t w);
 
 // Buffered File GET COLumn Window General-length Reversed Next
 // get next i*w column, using buffered freads
@@ -107,7 +115,9 @@ void sbfgetcolwgrn(int fd, size_t n, uint64_t *c, size_t nc, uint8_t w);
 // This version does not use window size to move in the file.
 // It starts reading from column `i` as-is without window-offset computation
 int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
-                  uint8_t w);
+                uint8_t w);
+int mgetcolwgri(svec_u8 *mrm, size_t i, size_t n, uint64_t *c, size_t nc,
+                uint8_t w);
 
 // Syscall File GET COLumn Window General-length starting at I
 // get w-length bit-packed column starting at position i, using syscall preads
@@ -117,13 +127,13 @@ int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
 // This version does not use window size to move in the file.
 // It starts reading from column `i` as-is without window-offset computation
 void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *c, size_t nc,
-                   uint8_t w);
+                  uint8_t w);
 
 // Window MeRGe Shift I:
 // merge windows `wc[n]` and `wp[n]`, storing in `c`
 // with `n` number of rows, shifting `-i` positions
 static inline void wmrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,
-                   uint64_t *c, size_t i, uint8_t w) {
+                          uint64_t *c, size_t i, uint8_t w) {
   // How it works
   // |    wp    |    wc    |
   // | '. . . .'| '. . . .'|
@@ -146,7 +156,7 @@ static inline void wmrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,
 // merge windows `wc[n]` and `wp[n]`, storing in `c`
 // with `n` number of rows, shifting `-i` positions
 static inline void wrmrgsi(size_t n, uint64_t const *wc, uint64_t const *wp,
-                    uint64_t *c, size_t i, uint8_t w) {
+                           uint64_t *c, size_t i, uint8_t w) {
   // How it works: similary to `wmrgsi`, but now windows are reversed
   //  |   wp  |   wc  |
   //  | abcde | 12345 |

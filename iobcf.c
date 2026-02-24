@@ -2,6 +2,7 @@
 #include "htslib/synced_bcf_reader.h"
 #include "htslib/vcf.h"
 #include "io.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -322,7 +323,18 @@ int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
     }
     free(gt_arr);
   }
-  return i + w ;
+  return i + w;
+}
+int mgetcolwgri(svec_u8 *mrm, size_t i, size_t n, uint64_t *c, size_t nc,
+                uint8_t w) {
+  memset(c, 0, n * sizeof *c);
+  for (size_t wix = 0; wix < w; wix++) {
+    uint8_t *row = mrm->v + (i + wix) * n;
+    for (size_t i = 0; i < n; i++) {
+      c[i] |= ((uint64_t)row[i] << wix);
+    }
+  }
+  return i + w;
 }
 
 void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,

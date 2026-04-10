@@ -179,7 +179,7 @@ struct pbwtad {
  * using externally allocated `aux[n]` auxiliary array.
  * This version assumes the `s` array to be already initialized.
  */
-void rrsortx(size_t n, uint64_t *c, size_t *s, size_t *aux) {
+void rrsortx0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
   size_t *tmp;
   size_t j;
   size_t *pre = s;
@@ -206,6 +206,46 @@ void rrsortx(size_t n, uint64_t *c, size_t *s, size_t *aux) {
       b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
       cnt[b]--;
       post[cnt[b]] = pre[j];
+    }
+    // swap s and aux
+    tmp = pre;
+    pre = post;
+    post = tmp;
+  }
+}
+
+void rrsortx(size_t n, uint64_t *c, size_t *s, size_t *aux) {
+  size_t *tmp;
+  size_t j;
+  size_t *pre = s;
+  size_t *post = aux;
+  uint8_t b;
+
+  size_t cnt[8][256] = {0};
+  for (size_t j = 0; j < n; j++) {
+    uint64_t val = c[j];
+    cnt[0][(val      ) & 0xFFULL]++;
+    cnt[1][(val >>  8) & 0xFFULL]++;
+    cnt[2][(val >> 16) & 0xFFULL]++;
+    cnt[3][(val >> 24) & 0xFFULL]++;
+    cnt[4][(val >> 32) & 0xFFULL]++;
+    cnt[5][(val >> 40) & 0xFFULL]++;
+    cnt[6][(val >> 48) & 0xFFULL]++;
+    cnt[7][(val >> 56) & 0xFFULL]++;
+  }
+
+  for (size_t i = 0; i < 8; i++) {
+    // prefix sum
+    for (size_t j = 1; j < 256; j++)
+      cnt[i][j] += cnt[i][j - 1];
+    // sorting
+    for (ssize_t j = n - 1; j >= 0; --j) {
+      /*cnt[mask2(c[pre[j]], i)]--;*/
+      /*post[cnt[mask2(c[pre[j]], i)]] = pre[j];*/
+
+      b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
+      cnt[i][b]--;
+      post[cnt[i][b]] = pre[j];
     }
     // swap s and aux
     tmp = pre;

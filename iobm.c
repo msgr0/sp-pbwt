@@ -124,11 +124,11 @@ void sbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
   size_t offset = i;
 
   // resetting offsets
-  if (__builtin_expect(nc == 0, 0)) {
-    bufn = BFGETCOLI_BUF_SIZE;
-    i = n;
-    return;
-  }
+  // if (__builtin_expect(nc == 0, 0)) {
+  //   bufn = BFGETCOLI_BUF_SIZE;
+  //   i = n;
+  //   return;
+  // }
   if (bufn == BFGETCOLI_BUF_SIZE) {
     /*#pragma omp parallel for*/
     for (size_t r = 0; r < n; r++) {
@@ -173,11 +173,11 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
 
   size_t offset = i;
   // resetting offsets
-  if (__builtin_expect(nc == 0, 0)) {
-    bufn = BFGETCOLI_BUF_SIZE;
-    i = n;
-    return;
-  }
+  // if (__builtin_expect(nc == 0, 0)) {
+  //   bufn = BFGETCOLI_BUF_SIZE;
+  //   i = n;
+  //   return;
+  // }
   if (bufn == BFGETCOLI_BUF_SIZE) {
     /*#pragma omp parallel for*/
     for (size_t r = 0; r < n; r++) {

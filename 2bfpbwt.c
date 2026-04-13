@@ -1513,6 +1513,7 @@ pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
   pbwtad **pb1 = malloc(W * sizeof(pbwtad *));
   pbwtad **pb1rev = malloc(W * sizeof(pbwtad *));
 
+  FILE *ffin = fdopen(fin, "r");
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   pbwtad *p0 = pbwtad_new(nrow);
   for (int j = 0; j < nrow; j++) {
@@ -1520,16 +1521,16 @@ pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
     p0->d[j] = 0;
   }
 
-  sbfgetcoln(fin, nrow, c0, ncol);
-  // fgetcoli(fin, 0, nrow, c0, ncol);
+  // sbfgetcoln(fin, nrow, c0, ncol);
+  fgetcoli(ffin, 0, nrow, c0, ncol);
   pb0[0] = cpbwt(nrow, c0, p0);
   pb0rev[0] = p0;
   PDUMP(0, pb0[0]);
   // PBWTAD_FREE(p0);
 
   for (int j = 1; j < W; j++) {
-    sbfgetcoln(fin, nrow, c0, ncol);
-    // fgetcoli(fin, j, nrow, c0, ncol);
+    // sbfgetcoln(fin, nrow, c0, ncol);
+    fgetcoli(ffin, j, nrow, c0, ncol);
     pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
     pb0rev[j] = pbwtad_new(nrow);
     reversecprev(pb0[j], pb0[j - 1], pb0rev[j], nrow);
@@ -1606,10 +1607,10 @@ pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
   pp0 = pb0[W - 1];
   pp1 = pb0[W - 2];
 
-  sbfgetcoln(0, j * W, NULL, 0);
+  // sbfgetcoln(0, j * W, NULL, 0);
   for (j = j * W; j < ncol; j++) {
-    sbfgetcoln(fin, nrow, c0, ncol);
-    // fgetcoli(fin, j, nrow, c0, ncol);
+    // sbfgetcoln(fin, nrow, c0, ncol);
+    fgetcoli(ffin, j, nrow, c0, ncol);
     cpbwtiLCP(nrow, j, c0, pp0, pp1);
     PDUMPR(j, pp1);
     SWAP(pp0, pp1);
@@ -1643,16 +1644,17 @@ pbwtad **mbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRM
     p0->d[j] = 0;
   }
 
-  // fgetcoli(fin, 0, nrow, c0, ncol);
-  mbfgetcoln(fin, nrow, c0, ncol);
+  FILE *ffin = fdopen(fin, "r");
+  fgetcoli(ffin, 0, nrow, c0, ncol);
+  // mbfgetcoln(fin, nrow, c0, ncol);
   pb0[0] = cpbwt(nrow, c0, p0);
   pb0rev[0] = p0;
   PDUMP(0, pb0[0]);
   // PBWTAD_FREE(p0);
 
   for (int j = 1; j < W; j++) {
-    mbfgetcoln(fin, nrow, c0, ncol);
-    // fgetcoli(fin, j, nrow, c0, ncol);
+    // mbfgetcoln(fin, nrow, c0, ncol);
+    fgetcoli(ffin, j, nrow, c0, ncol);
     pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
     pb0rev[j] = pbwtad_new(nrow);
     reversecprev(pb0[j], pb0[j - 1], pb0rev[j], nrow);
@@ -1731,10 +1733,10 @@ pbwtad **mbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRM
   pp0 = pb0[W - 1];
   pp1 = pb0[W - 2];
 
-  mbfgetcoln(0, j * W, NULL, 0);
+  // mbfgetcoln(0, j * W, NULL, 0);
   for (j = j * W; j < ncol; j++) {
-    // fgetcoli(fin, j, nrow, c0, ncol);
-    mbfgetcoln(fin, nrow, c0, ncol);
+    fgetcoli(ffin, j, nrow, c0, ncol);
+    // mbfgetcoln(fin, nrow, c0, ncol);
     cpbwtiLCP(nrow, j, c0, pp0, pp1);
     PDUMPR(j, pp1);
     SWAP(pp0, pp1);

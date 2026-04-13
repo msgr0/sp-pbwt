@@ -122,6 +122,13 @@ void sbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
     buf = malloc(BFGETCOLI_BUF_SIZE * n * sizeof *buf);
 
   size_t offset = i;
+
+  // resetting offsets
+  if (__builtin_expect(nc == 0, 0)) {
+    bufn = BFGETCOLI_BUF_SIZE;
+    i = n;
+    return;
+  }
   if (bufn == BFGETCOLI_BUF_SIZE) {
     /*#pragma omp parallel for*/
     for (size_t r = 0; r < n; r++) {
@@ -151,7 +158,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
     buf = malloc(BFGETCOLI_BUF_SIZE * n * sizeof *buf);
 
   static uint8_t *fdmm = NULL;
-  if (!fdmm) {
+  if (__builtin_expect(!fdmm, 0)) {
     struct stat st;
     if (fstat(fd, &st) < 0) {
       perror("fstat");
@@ -165,6 +172,12 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
   }
 
   size_t offset = i;
+  // resetting offsets
+  if (__builtin_expect(nc == 0, 0)) {
+    bufn = BFGETCOLI_BUF_SIZE;
+    i = n;
+    return;
+  }
   if (bufn == BFGETCOLI_BUF_SIZE) {
     /*#pragma omp parallel for*/
     for (size_t r = 0; r < n; r++) {
@@ -462,7 +475,7 @@ void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
 }
 
 int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
-                 uint8_t w) {
+                uint8_t w) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
   uint64_t x;

@@ -51,8 +51,8 @@ uint8_t DO_DUMP = 0;
       printf("%zu", (p)->a[pdump_j__]);                                        \
       fputc('|', stdout);                                                      \
       for (pdump_j__ = 0; pdump_j__ < nrow - 1; pdump_j__++)                   \
-        printf("%zu ", (size_t)(i) + 1 - (p)->d[pdump_j__]);                           \
-      printf("%zu", (size_t)(i) + 1 - (p)->d[pdump_j__]);                              \
+        printf("%zu ", (size_t)(i) + 1 - (p)->d[pdump_j__]);                   \
+      printf("%zu", (size_t)(i) + 1 - (p)->d[pdump_j__]);                      \
       fputc(0xA, stdout);                                                      \
     }                                                                          \
   } while (0)
@@ -224,8 +224,8 @@ void rrsortx(size_t n, uint64_t *c, size_t *s, size_t *aux) {
   size_t cnt[8][256] = {0};
   for (size_t j = 0; j < n; j++) {
     uint64_t val = c[j];
-    cnt[0][(val      ) & 0xFFULL]++;
-    cnt[1][(val >>  8) & 0xFFULL]++;
+    cnt[0][(val) & 0xFFULL]++;
+    cnt[1][(val >> 8) & 0xFFULL]++;
     cnt[2][(val >> 16) & 0xFFULL]++;
     cnt[3][(val >> 24) & 0xFFULL]++;
     cnt[4][(val >> 32) & 0xFFULL]++;
@@ -1504,6 +1504,255 @@ pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) { // BPR
   return NULL;
 }
 
+// bpr with syscall
+pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
+  // NOTE: right now I don't know what I need, so I'm keeping
+  // everything in memory, we'll see later
+  pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb0rev = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb1 = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb1rev = malloc(W * sizeof(pbwtad *));
+
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  pbwtad *p0 = pbwtad_new(nrow);
+  for (int j = 0; j < nrow; j++) {
+    p0->a[j] = j;
+    p0->d[j] = 0;
+  }
+
+  sbfgetcoln(fin, nrow, c0, ncol);
+  // fgetcoli(fin, 0, nrow, c0, ncol);
+  pb0[0] = cpbwt(nrow, c0, p0);
+  pb0rev[0] = p0;
+  PDUMP(0, pb0[0]);
+  // PBWTAD_FREE(p0);
+
+  for (int j = 1; j < W; j++) {
+    sbfgetcoln(fin, nrow, c0, ncol);
+    // fgetcoli(fin, j, nrow, c0, ncol);
+    pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
+    pb0rev[j] = pbwtad_new(nrow);
+    reversecprev(pb0[j], pb0[j - 1], pb0rev[j], nrow);
+    PDUMP(j, pb0[j]);
+  }
+
+  /* swapping div values with LCP for window computation */
+  for (int j = 0; j < W; j++) {
+    swapdiv(pb0[j], nrow, j);
+    swapdiv(pb0rev[j], nrow, j);
+    // PDUMP(j, pb0[j]);
+  }
+
+  uint64_t *pw0 = malloc(nrow * sizeof *pw0);
+  uint64_t *pw1 = malloc(nrow * sizeof *pw1);
+  size_t *aux = malloc(nrow * sizeof *aux);
+  sbfgetcolw64rn(fin, nrow, pw0, ncol);
+
+  // pb0 is now filled with computed values,
+  // to allow reusing I need to fill pb1 with empty values
+  for (int j = 0; j < W; j++) {
+    pb1[j] = pbwtad_new(nrow);
+    pb1rev[j] = pbwtad_new(nrow);
+  }
+
+  size_t j;
+
+  for (j = 1; j * W <= ncol - W; j++) {
+    sbfgetcolw64rn(fin, nrow, pw1, ncol);
+    pbwtad *ps = pb1[W - 1];
+    pbwtad *psrev = pb1rev[W - 1];
+    memcpy(ps->a, pb0[W - 1]->a, nrow * sizeof *(ps->a));
+    memcpy(ps->d, pb0[W - 1]->d, nrow * sizeof *(ps->d));
+    memcpy(psrev->a, pb0rev[W - 1]->a, nrow * sizeof *(ps->a));
+    memcpy(psrev->d, pb0rev[W - 1]->d, nrow * sizeof *(ps->d));
+    rrsortx(nrow, pw1, ps->a, aux);
+    reversec(ps, psrev, nrow);
+    divc(nrow, pw1, ps, pb0[W - 1], psrev, pb0rev[W - 1], W);
+
+    // pbwtad *ps = pbwtad_new(nrow);
+    // pb[W * (j + 1) - 1] = ps;
+    // memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
+    // rrsortx(nrow, pw1, ps->a, aux);
+
+#pragma omp parallel for shared(pw1, pw0, pb0, pb1, j)
+    for (size_t x = 1; x < W; x++) {
+      uint64_t *w = malloc(nrow * sizeof *w);
+      size_t J = W - 1;
+
+      wr64mrgsi(nrow, pw1, pw0, w, x);
+      pbwtad *ps = pb1[J - x];
+      pbwtad *psrev = pb1rev[J - x];
+      // pbwtad *ps = pbwtad_new(nrow);
+      // pb[J - x] = ps;
+      memcpy(ps->a, pb0[J - x]->a, nrow * sizeof *(ps->a));
+      memcpy(ps->d, pb0[J - x]->d, nrow * sizeof *(ps->d));
+      memcpy(psrev->a, pb0[J - x]->a, nrow * sizeof *(psrev->a));
+      memcpy(psrev->d, pb0rev[J - x]->a, nrow * sizeof *(psrev->d));
+      // memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
+      rrsortx_noaux(nrow, w, ps->a);
+      reversec(ps, psrev, nrow);
+      divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
+      FREE(w);
+    }
+    PDUMP_SEQ_OFFSETR(0, W, pb1, W * j);
+    // PDUMP_SEQ(W * j - 1, W * (j + 1) - 1, pb1);
+    SWAP(pw0, pw1);
+    SWAP(pb0, pb1);
+    SWAP(pb0rev, pb1rev);
+    // j++;
+  }
+
+  pbwtad *pp0, *pp1;
+  pp0 = pb0[W - 1];
+  pp1 = pb0[W - 2];
+
+  sbfgetcoln(0, j * W, NULL, 0);
+  for (j = j * W; j < ncol; j++) {
+    sbfgetcoln(fin, nrow, c0, ncol);
+    // fgetcoli(fin, j, nrow, c0, ncol);
+    cpbwtiLCP(nrow, j, c0, pp0, pp1);
+    PDUMPR(j, pp1);
+    SWAP(pp0, pp1);
+    // pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
+    // PDUMP(j, pb[j]);
+  }
+  for (int j = 0; j < W; j++) {
+    PBWTAD_FREE(pb0[j]);
+    PBWTAD_FREE(pb1[j]);
+  }
+  FREE(pb0);
+  FREE(pb1);
+  FREE(pw0);
+  FREE(aux);
+  FREE(c0);
+  return NULL;
+}
+
+pbwtad **mbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRM
+  // NOTE: right now I don't know what I need, so I'm keeping
+  // everything in memory, we'll see later
+  pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb0rev = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb1 = malloc(W * sizeof(pbwtad *));
+  pbwtad **pb1rev = malloc(W * sizeof(pbwtad *));
+
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  pbwtad *p0 = pbwtad_new(nrow);
+  for (int j = 0; j < nrow; j++) {
+    p0->a[j] = j;
+    p0->d[j] = 0;
+  }
+
+  // fgetcoli(fin, 0, nrow, c0, ncol);
+  mbfgetcoln(fin, nrow, c0, ncol);
+  pb0[0] = cpbwt(nrow, c0, p0);
+  pb0rev[0] = p0;
+  PDUMP(0, pb0[0]);
+  // PBWTAD_FREE(p0);
+
+  for (int j = 1; j < W; j++) {
+    mbfgetcoln(fin, nrow, c0, ncol);
+    // fgetcoli(fin, j, nrow, c0, ncol);
+    pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
+    pb0rev[j] = pbwtad_new(nrow);
+    reversecprev(pb0[j], pb0[j - 1], pb0rev[j], nrow);
+    PDUMP(j, pb0[j]);
+  }
+
+  /* swapping div values with LCP for window computation */
+  for (int j = 0; j < W; j++) {
+    swapdiv(pb0[j], nrow, j);
+    swapdiv(pb0rev[j], nrow, j);
+    // PDUMP(j, pb0[j]);
+  }
+
+  uint64_t *pw0 = malloc(nrow * sizeof *pw0);
+  uint64_t *pw1 = malloc(nrow * sizeof *pw1);
+  size_t *aux = malloc(nrow * sizeof *aux);
+  // bfgetcolw64rn(fin, nrow, pw0, ncol);
+  sbfgetcolw64rn_mmap(fin, nrow, pw0, ncol);
+
+  // pb0 is now filled with computed values,
+  // to allow reusing I need to fill pb1 with empty values
+  for (int j = 0; j < W; j++) {
+    pb1[j] = pbwtad_new(nrow);
+    pb1rev[j] = pbwtad_new(nrow);
+  }
+
+  size_t j;
+
+  for (j = 1; j * W <= ncol - W; j++) {
+    // bfgetcolw64rn(fin, nrow, pw1, ncol);
+    sbfgetcolw64rn_mmap(fin, nrow, pw1, ncol);
+    pbwtad *ps = pb1[W - 1];
+    pbwtad *psrev = pb1rev[W - 1];
+    memcpy(ps->a, pb0[W - 1]->a, nrow * sizeof *(ps->a));
+    memcpy(ps->d, pb0[W - 1]->d, nrow * sizeof *(ps->d));
+    memcpy(psrev->a, pb0rev[W - 1]->a, nrow * sizeof *(ps->a));
+    memcpy(psrev->d, pb0rev[W - 1]->d, nrow * sizeof *(ps->d));
+    rrsortx(nrow, pw1, ps->a, aux);
+    reversec(ps, psrev, nrow);
+    divc(nrow, pw1, ps, pb0[W - 1], psrev, pb0rev[W - 1], W);
+
+    // pbwtad *ps = pbwtad_new(nrow);
+    // pb[W * (j + 1) - 1] = ps;
+    // memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
+    // rrsortx(nrow, pw1, ps->a, aux);
+
+#pragma omp parallel for shared(pw1, pw0, pb0, pb1, j)
+    for (size_t x = 1; x < W; x++) {
+      uint64_t *w = malloc(nrow * sizeof *w);
+      size_t J = W - 1;
+
+      wr64mrgsi(nrow, pw1, pw0, w, x);
+      pbwtad *ps = pb1[J - x];
+      pbwtad *psrev = pb1rev[J - x];
+      // pbwtad *ps = pbwtad_new(nrow);
+      // pb[J - x] = ps;
+      memcpy(ps->a, pb0[J - x]->a, nrow * sizeof *(ps->a));
+      memcpy(ps->d, pb0[J - x]->d, nrow * sizeof *(ps->d));
+      memcpy(psrev->a, pb0[J - x]->a, nrow * sizeof *(psrev->a));
+      memcpy(psrev->d, pb0rev[J - x]->a, nrow * sizeof *(psrev->d));
+      // memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
+      rrsortx_noaux(nrow, w, ps->a);
+      reversec(ps, psrev, nrow);
+      divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
+      FREE(w);
+    }
+    PDUMP_SEQ_OFFSETR(0, W, pb1, W * j);
+    // PDUMP_SEQ(W * j - 1, W * (j + 1) - 1, pb1);
+    SWAP(pw0, pw1);
+    SWAP(pb0, pb1);
+    SWAP(pb0rev, pb1rev);
+    // j++;
+  }
+
+  pbwtad *pp0, *pp1;
+  pp0 = pb0[W - 1];
+  pp1 = pb0[W - 2];
+
+  mbfgetcoln(0, j * W, NULL, 0);
+  for (j = j * W; j < ncol; j++) {
+    // fgetcoli(fin, j, nrow, c0, ncol);
+    mbfgetcoln(fin, nrow, c0, ncol);
+    cpbwtiLCP(nrow, j, c0, pp0, pp1);
+    PDUMPR(j, pp1);
+    SWAP(pp0, pp1);
+    // pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
+    // PDUMP(j, pb[j]);
+  }
+  for (int j = 0; j < W; j++) {
+    PBWTAD_FREE(pb0[j]);
+    PBWTAD_FREE(pb1[j]);
+  }
+  FREE(pb0);
+  FREE(pb1);
+  FREE(pw0);
+  FREE(aux);
+  FREE(c0);
+  return NULL;
+}
+
 pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #if defined(BF2IOMODE_BCF)
   ncol = 0;
@@ -1525,7 +1774,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     }
     hts_close(fp);
   }
-  fprintf(stderr,"ncol_read:%zu\n", ncol);
+  fprintf(stderr, "ncol_read:%zu\n", ncol);
 #endif
 
   pbwtad **pb = malloc((W + 1) * sizeof(pbwtad *));
@@ -1565,8 +1814,8 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
     PDUMP(j, pb[j + 1]);
   }
-  for (size_t j = 0; j < W ; j++) {
-    swapdiv(pb[j], nrow, j-1);
+  for (size_t j = 0; j < W; j++) {
+    swapdiv(pb[j], nrow, j - 1);
   }
 
 #pragma omp parallel
@@ -1597,7 +1846,8 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 
     size_t start = tid * base + (tid < rem ? tid : rem);
     size_t count = base + (tid < rem ? 1 : 0);
-    fprintf(stderr, ">>>%zu, %zu, %zu, %zu, %zu, %zu\n\n", tid, nthreads, base, rem, start, count);
+    fprintf(stderr, ">>>%zu, %zu, %zu, %zu, %zu, %zu\n\n", tid, nthreads, base,
+            rem, start, count);
     pbwtad *pt0 = pbwtad_new(nrow);
     pbwtad *pt0rev = pbwtad_new(nrow);
     pbwtad *pt1 = pbwtad_new(nrow);
@@ -1608,7 +1858,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
     for (size_t offset = 0; offset < count; offset++) {
       size_t lane = start + offset;
       // initislization of the lane. pt0 should contain the previous iter
-      // value of pbwt. 
+      // value of pbwt.
       memcpy(pt0->a, pb[lane]->a, nrow * sizeof *(pb[lane]->a));
       memcpy(pt0->d, pb[lane]->d, nrow * sizeof *(pb[lane]->d));
 
@@ -1618,7 +1868,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
       for (size_t j = lane; j + W <= ncol; j += W) {
 
 #ifdef BF2IOMODE_BCF
-        lastrowread = fgetcolwgri(fin, j+0, nrow, pw, lastrowread, W);
+        lastrowread = fgetcolwgri(fin, j + 0, nrow, pw, lastrowread, W);
 
 #else
         fgetcolwgri(fin, j, nrow, pw, ncol, W);
@@ -1636,7 +1886,7 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #ifdef DBDUMP
 #pragma omp critical
         {
-          PDUMPR(j + W -1, pt0);
+          PDUMPR(j + W - 1, pt0);
           // PDUMPR(j+W -1, pt1);
         }
 #endif
@@ -1731,7 +1981,7 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
 }
 
 int main(int argc, char *argv[]) {
-  char _usage_args_[] = "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr|spr] FILE\n";
+  char _usage_args_[] = "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr[s|m]|spr] FILE\n";
   if (argc < 2) {
     fprintf(stderr, "Usage: %s %s FILE\n", argv[0], _usage_args_);
     return EXIT_FAILURE;
@@ -1841,6 +2091,12 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "bpr") == 0) { // fixed
     // r = bwparc_rrs(fin, nrow, ncol);
     TRACE(bwparc_rrs(fin, nrow, ncol), r);
+  } else if (strcmp(argv[1], "bprs") == 0) {
+    // r = bwparc_rrs(fin, nrow, ncol);
+    TRACE(sbwparc_rrs(fd, nrow, ncol), r);
+  } else if (strcmp(argv[1], "bprm") == 0) {
+    // r = bwparc_rrs(fin, nrow, ncol);
+    TRACE(mbwparc_rrs(fd, nrow, ncol), r);
   } else if (strcmp(argv[1], "spr") == 0) { // broken
     // r = wstagparc_rrs(argv[2], nrow, ncol);
     TRACE(wstagparc_rrs(argv[2], nrow, ncol), r);

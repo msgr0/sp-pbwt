@@ -1,5 +1,6 @@
 // vim:ft=c
 #include "io.h"
+#include <stdint.h>
 #include <string.h>
 
 #define RCBUFSIZE 8192
@@ -512,5 +513,41 @@ void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
     }
     /*printf(")=%llu\n", c[r]);*/
     lseek(fd, nc - w + 1, SEEK_CUR);
+  }
+}
+
+void spfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                  uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+  uint64_t x;
+  uint8_t buf[64];
+  off_t offset = i;
+
+  for (size_t r = 0; r < n; r++) {
+    c[r] = 0;
+    pread(fd, buf, w, offset);
+    for (size_t s = 0; s < w; s++) {
+      x = buf[s] - 48;
+      c[r] = (x << s) | c[r];
+    }
+    /*printf(")=%llu\n", c[r]);*/
+    offset += (nc + 1);
+  }
+}
+void fgetcolwgri_mmap(uint8_t *fdmm, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                  uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+  uint64_t x;
+  off_t offset = i;
+
+  for (size_t r = 0; r < n; r++) {
+    c[r] = 0;
+    for (size_t s = 0; s < w; s++) {
+      x = fdmm[offset + s] - 48;
+      c[r] = (x << s) | c[r];
+    }
+    offset += (nc + 1);
   }
 }

@@ -1910,6 +1910,231 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
   return pb;
 }
 
+pbwtad **swstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPRS
+#if defined(BF2IOMODE_BCF)
+  fprintf(stderr, "Not valid version for BCF/VCF\n");
+  exit(3);
+#endif
+
+  pbwtad **pb = malloc((W + 1) * sizeof(pbwtad *));
+  pbwtad *pbprev = pbwtad_new(nrow);
+
+  for (int j = 0; j < W + 1; j++) {
+    pb[j] = pbwtad_new(nrow);
+  }
+  for (size_t i = 0; i < nrow; i++) {
+    pb[0]->a[i] = i;
+    pb[0]->d[i] = 0;
+  }
+
+  FILE *fin = fopen(fpath, "r");
+  if (!fin) {
+    perror("[spr]");
+    exit(32);
+  }
+
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  fgetcoli(fin, 0, nrow, c0, ncol);
+  cpbwti(nrow, c0, pb[0], pb[1]);
+  // PDUMP(0, pb[1]);
+
+  for (size_t j = 1; j < W; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    cpbwti(nrow, c0, pb[j], pb[j + 1]);
+    PDUMP(j, pb[j + 1]);
+  }
+  for (size_t j = 0; j < W; j++) {
+    swapdiv(pb[j], nrow, j - 1);
+  }
+
+#pragma omp parallel
+  {
+
+    int fd = open(fpath, O_RDONLY);
+
+    size_t tid = omp_get_thread_num();
+    size_t nthreads = omp_get_num_threads();
+
+    size_t base = W / nthreads;
+    size_t rem = W % nthreads;
+
+    size_t start = tid * base + (tid < rem ? tid : rem);
+    size_t count = base + (tid < rem ? 1 : 0);
+    // fprintf(stderr, ">>>%zu, %zu, %zu, %zu, %zu, %zu\n\n", tid, nthreads,
+    // base,
+    //         rem, start, count);
+    pbwtad *pt0 = pbwtad_new(nrow);
+    pbwtad *pt0rev = pbwtad_new(nrow);
+    pbwtad *pt1 = pbwtad_new(nrow);
+    pbwtad *pt1rev = pbwtad_new(nrow);
+    size_t *aux = malloc(nrow * sizeof *aux);
+    uint64_t *pw = malloc(nrow * sizeof *pw);
+
+    for (size_t offset = 0; offset < count; offset++) {
+      size_t lane = start + offset;
+      memcpy(pt0->a, pb[lane]->a, nrow * sizeof *(pb[lane]->a));
+      memcpy(pt0->d, pb[lane]->d, nrow * sizeof *(pb[lane]->d));
+      reversec(pt0, pt0rev, nrow);
+
+      for (size_t j = lane; j + W <= ncol; j += W) {
+        spfgetcolwgri(fd, j, nrow, pw, ncol, W);
+        memcpy(pt1->a, pt0->a, nrow * sizeof *(pt0->a));
+        memcpy(pt1->d, pt0->d, nrow * sizeof *(pt0->d));
+        memcpy(pt1rev->a, pt0rev->a, nrow * sizeof *(pt0rev->a));
+        memcpy(pt1rev->d, pt0rev->d, nrow * sizeof *(pt0rev->d));
+
+        rrsortx(nrow, pw, pt0->a, aux);
+        reversec(pt0, pt0rev, nrow);
+        divc(nrow, pw, pt0, pt1, pt0rev, pt1rev, W);
+
+#ifdef DBDUMP
+#pragma omp critical
+        {
+          PDUMPR(j + W - 1, pt0);
+        }
+#endif
+      }
+    }
+
+    PBWTAD_FREE(pt0);
+    PBWTAD_FREE(pt1);
+    PBWTAD_FREE(pt0rev);
+    PBWTAD_FREE(pt1rev);
+    FREE(pt0);
+    FREE(pt1);
+    FREE(pt0rev);
+    FREE(pt1rev);
+    FREE(aux);
+    FREE(pw);
+  }
+  FREE(c0);
+  return pb;
+}
+
+pbwtad **mwstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPRM
+#if defined(BF2IOMODE_BCF)
+  fprintf(stderr, "Not valid version for BCF/VCF\n");
+  exit(3);
+#endif
+
+  pbwtad **pb = malloc((W + 1) * sizeof(pbwtad *));
+  pbwtad *pbprev = pbwtad_new(nrow);
+
+  for (int j = 0; j < W + 1; j++) {
+    pb[j] = pbwtad_new(nrow);
+  }
+  for (size_t i = 0; i < nrow; i++) {
+    pb[0]->a[i] = i;
+    pb[0]->d[i] = 0;
+  }
+
+  FILE *fin = fopen(fpath, "r");
+  if (!fin) {
+    perror("[spr]");
+    exit(32);
+  }
+
+  uint8_t *c0 = malloc(nrow * sizeof *c0);
+  fgetcoli(fin, 0, nrow, c0, ncol);
+  cpbwti(nrow, c0, pb[0], pb[1]);
+  // PDUMP(0, pb[1]);
+
+  for (size_t j = 1; j < W; j++) {
+    fgetcoli(fin, j, nrow, c0, ncol);
+    cpbwti(nrow, c0, pb[j], pb[j + 1]);
+    PDUMP(j, pb[j + 1]);
+  }
+  for (size_t j = 0; j < W; j++) {
+    swapdiv(pb[j], nrow, j - 1);
+  }
+
+  int fd = open(fpath, O_RDONLY);
+  if (fd < 0) {
+    perror("open");
+    exit(EXIT_FAILURE);
+  }
+  struct stat st;
+  if (fstat(fd, &st) < 0) {
+    perror("fstat");
+    exit(EXIT_FAILURE);
+  }
+  if (st.st_size == 0) {
+    fprintf(stderr, "Error: File is empty\n");
+    close(fd);
+    exit(EXIT_FAILURE);
+  }
+
+  static uint8_t *fdmm = NULL;
+  fdmm = mmap(NULL, st.st_size, PROT_READ, __MMAP_FLAGS, fd, 0);
+  if (fdmm == MAP_FAILED) {
+    perror("mmap");
+    exit(EXIT_FAILURE);
+  }
+  close(fd);
+
+#pragma omp parallel
+  {
+    size_t tid = omp_get_thread_num();
+    size_t nthreads = omp_get_num_threads();
+
+    size_t base = W / nthreads;
+    size_t rem = W % nthreads;
+
+    size_t start = tid * base + (tid < rem ? tid : rem);
+    size_t count = base + (tid < rem ? 1 : 0);
+    // fprintf(stderr, ">>>%zu, %zu, %zu, %zu, %zu, %zu\n\n", tid, nthreads,
+    // base,
+    //         rem, start, count);
+    pbwtad *pt0 = pbwtad_new(nrow);
+    pbwtad *pt0rev = pbwtad_new(nrow);
+    pbwtad *pt1 = pbwtad_new(nrow);
+    pbwtad *pt1rev = pbwtad_new(nrow);
+    size_t *aux = malloc(nrow * sizeof *aux);
+    uint64_t *pw = malloc(nrow * sizeof *pw);
+
+    for (size_t offset = 0; offset < count; offset++) {
+      size_t lane = start + offset;
+      memcpy(pt0->a, pb[lane]->a, nrow * sizeof *(pb[lane]->a));
+      memcpy(pt0->d, pb[lane]->d, nrow * sizeof *(pb[lane]->d));
+      reversec(pt0, pt0rev, nrow);
+
+      for (size_t j = lane; j + W <= ncol; j += W) {
+
+        fgetcolwgri_mmap(fdmm, j, nrow, pw, ncol, W);
+        memcpy(pt1->a, pt0->a, nrow * sizeof *(pt0->a));
+        memcpy(pt1->d, pt0->d, nrow * sizeof *(pt0->d));
+        memcpy(pt1rev->a, pt0rev->a, nrow * sizeof *(pt0rev->a));
+        memcpy(pt1rev->d, pt0rev->d, nrow * sizeof *(pt0rev->d));
+
+        rrsortx(nrow, pw, pt0->a, aux);
+        reversec(pt0, pt0rev, nrow);
+        divc(nrow, pw, pt0, pt1, pt0rev, pt1rev, W);
+
+#ifdef DBDUMP
+#pragma omp critical
+        {
+          PDUMPR(j + W - 1, pt0);
+        }
+#endif
+      }
+    }
+
+    PBWTAD_FREE(pt0);
+    PBWTAD_FREE(pt1);
+    PBWTAD_FREE(pt0rev);
+    PBWTAD_FREE(pt1rev);
+    FREE(pt0);
+    FREE(pt1);
+    FREE(pt0rev);
+    FREE(pt1rev);
+    FREE(aux);
+    FREE(pw);
+  }
+  FREE(c0);
+  //mmunmap
+  return pb;
+}
+
 pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
@@ -1983,7 +2208,8 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
 }
 
 int main(int argc, char *argv[]) {
-  char _usage_args_[] = "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr[s|m]|spr] FILE\n";
+  char _usage_args_[] =
+      "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr[s|m]|spr[s|m]] FILE\n";
   if (argc < 2) {
     fprintf(stderr, "Usage: %s %s FILE\n", argv[0], _usage_args_);
     return EXIT_FAILURE;
@@ -2099,9 +2325,12 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "bprm") == 0) {
     // r = bwparc_rrs(fin, nrow, ncol);
     TRACE(mbwparc_rrs(fd, nrow, ncol), r);
-  } else if (strcmp(argv[1], "spr") == 0) { // broken
-    // r = wstagparc_rrs(argv[2], nrow, ncol);
+  } else if (strcmp(argv[1], "spr") == 0) {
     TRACE(wstagparc_rrs(argv[2], nrow, ncol), r);
+  } else if (strcmp(argv[1], "sprs") == 0) {
+    TRACE(swstagparc_rrs(argv[2], nrow, ncol), r);
+  } else if (strcmp(argv[1], "sprm") == 0) {
+    TRACE(mwstagparc_rrs(argv[2], nrow, ncol), r);
   } else if (strcmp(argv[1], "srs") == 0) { // hidle
     // r = wseq_rrs(fin, nrow, ncol);
     TRACE(wseq_rrs(fin, nrow, ncol), r);

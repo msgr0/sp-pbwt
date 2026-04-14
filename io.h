@@ -119,6 +119,11 @@ int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *c, size_t nc,
 void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *c, size_t nc,
                    uint8_t w);
 
+void spfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                  uint8_t w);
+void fgetcolwgri_mmap(uint8_t *fdmm, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                  uint8_t w);
+
 // Window MeRGe Shift I:
 // merge windows `wc[n]` and `wp[n]`, storing in `c`
 // with `n` number of rows, shifting `-i` positions

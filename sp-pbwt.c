@@ -2131,17 +2131,12 @@ pbwtad **mwstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPRM
     FREE(pw);
   }
   FREE(c0);
-  //mmunmap
+  // mmunmap
   return pb;
 }
 
 pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
   pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-
-  // first W=(64 for now), must be computed linearly
-  // TODO: ask if true
 
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   pbwtad *p0 = malloc(sizeof *p0);
@@ -2208,10 +2203,31 @@ pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
 }
 
 int main(int argc, char *argv[]) {
+#if defined(BF2IOMODE_BM)
   char _usage_args_[] =
-      "[lin|bli[s|m]|ars|bar[s|m]|prs|bpr[s|m]|spr[s|m]] FILE\n";
-  if (argc < 2) {
-    fprintf(stderr, "Usage: %s %s FILE\n", argv[0], _usage_args_);
+      "[sampled|linear|blockpar|stagpar]-[syscall|mmap] FILE\n";
+  if (strcmp(argv[1], "linear-syscall") == 0) {
+  } else if (strcmp(argv[1], "linear-mmap") == 0) {
+  } else if (strcmp(argv[1], "sample-syscall") == 0) {
+  } else if (strcmp(argv[1], "sample-mmap") == 0) {
+  } else if (strcmp(argv[1], "blockpar-syscall") == 0) {
+  } else if (strcmp(argv[1], "blockpar-mmap") == 0) {
+  } else if (strcmp(argv[1], "stagpar-syscall") == 0) {
+  } else if (strcmp(argv[1], "stagpar-mmap") == 0) {
+#elif defined(BF2IOMODE_BCF)
+  char _usage_args_[] = "[sampled|linear|blockpar|stagpar] FILE\n";
+  if (strcmp(argv[1], "linear") == 0) {
+  } else if (strcmp(argv[1], "sampled") == 0) {
+  } else if (strcmp(argv[1], "blockpar") == 0) {
+  } else if (strcmp(argv[1], "stagpar") == 0) {
+#endif
+  } else {
+    fprintf(stderr, "Wrong mode \"%s\"\nUsage: %s %s", argv[1], argv[0],
+            _usage_args_);
+    return EXIT_FAILURE;
+  }
+  if (argc < 3) {
+    fprintf(stderr, "Missing input file\nUsage: %s %s", argv[0], _usage_args_);
     return EXIT_FAILURE;
   }
 
@@ -2235,186 +2251,42 @@ int main(int argc, char *argv[]) {
   size_t nrow, ncol;
   TRACE(fgetrc(fin, &nrow, &ncol));
   DPRINT("[%s] row: %5zu, col: %5zu\n", __func__, nrow, ncol);
-  // uint8_t *cc = malloc(nrow * sizeof *cc);
-  // fgetcoli(fin, 0, nrow, cc, 0);
-  // parr(nrow, cc, "%d ");
-  // fgetcoli(fin, 1, nrow, cc, 0);
-  // parr(nrow, cc, "%d ");
-  // fgetcoli(fin, 2, nrow, cc, 0);
-  // parr(nrow, cc, "%d ");
-  // fgetcoli(fin, 3, nrow, cc, 0);
-  // parr(nrow, cc, "%d ");
-  // fgetcoli(fin, 4, nrow, cc, 0);
-  // parr(nrow, cc, "%d ");
-  // fgetcoli(fin, 5, nrow, cc, 0);
-  // parr(nrow, cc, "%d ");
-  // fgetcoli(fin, 7, nrow, cc, 0);
-
-  // bcf_hdr_t *hdr = sr->readers[0].header;
-  // int nsmpl = bcf_hdr_nsamples(hdr);
-  // printf("nsmpl: %d\n", nsmpl);
-
-  // uint8_t *col = malloc(nsmpl * 2 * sizeof *col); // NOTE: assume diploid
-  // size_t n = 0;
-  // while (bcf_sr_next_line(sr)) {
-  //   bcf1_t *line = bcf_sr_get_line(sr, 0);
-  //   int32_t *gt_arr = NULL, ngt_arr = 0;
-  //   int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
-  //
-  //   size_t icol = 0;
-  //   for (size_t i = 0; i < nsmpl; i++) {
-  //     int32_t *ptr = gt_arr + i * 2;
-  //     // hap 1
-  //     // if (ptr[0] == bcf_int32_vector_end)
-  //     //   exit(-2);
-  //     // if (bcf_gt_is_missing(ptr[0]))
-  //     //   exit(-1);
-  //     col[2 * i] = bcf_gt_allele(ptr[0]);
-  //
-  //     // hap 2
-  //     // if (ptr[1] == bcf_int32_vector_end)
-  //     //   exit(-2);
-  //     // if (bcf_gt_is_missing(ptr[1]))
-  //     //   exit(-1);
-  //     col[2 * i + 1] = bcf_gt_allele(ptr[1]);
-  //   }
-  //   // parr(nsmpl * 2, col, "%d ");
-  //   printf("%zu: %d\n", n, col[1]);
-  //   n++;
-  // }
   pbwtad **r;
 
-  if (argc > 3) {
-    if (strcmp(argv[3], "DUMP") == 0) {
-      DO_DUMP = 1;
-    }
-  }
-  if (strcmp(argv[1], "lin") == 0) {
-    // r = linc(fin, nrow, ncol);
-    TRACE(linc(fin, nrow, ncol), r);
-  } else if (strcmp(argv[1], "bli") == 0) {
-    // r = blinc(fin, nrow, ncol);
-    TRACE(blinc(fin, nrow, ncol), r);
-  } else if (strcmp(argv[1], "blis") == 0) {
-    // r = sblinc(fd, nrow, ncol);
-    TRACE(sblinc(fd, nrow, ncol), r); // BLIS
-  } else if (strcmp(argv[1], "blim") == 0) {
-    // r = mblinc(fd, nrow, ncol);
-    TRACE(mblinc(fd, nrow, ncol), r); // BLIM
-  } else if (strcmp(argv[1], "ars") == 0) {
-    // r = wapproxc_rrs(fin, nrow, ncol);
-    TRACE(wapproxc_rrs(fin, nrow, ncol), r);
-  } else if (strcmp(argv[1], "bar") == 0) {
-    // r = wbapproxc_rrs(fin, nrow, ncol);
-    TRACE(wbapproxc_rrs(fin, nrow, ncol), r);
-  } else if (strcmp(argv[1], "bars") == 0) {
-    // r = swbapproxc_rrs(fd, nrow, ncol);
-    TRACE(swbapproxc_rrs(fd, nrow, ncol), r);
-  } else if (strcmp(argv[1], "barm") == 0) { // fixed
-    // r = mwbapproxc_rrs(fd, nrow, ncol);
-    TRACE(mwbapproxc_rrs(fd, nrow, ncol), r);
-  } else if (strcmp(argv[1], "prs") == 0) {
-    // r = wparc_rrs(fin, nrow, ncol);
-    TRACE(wparc_rrs(fin, nrow, ncol), r);
-  } else if (strcmp(argv[1], "bpr") == 0) { // fixed
-    // r = bwparc_rrs(fin, nrow, ncol);
-    TRACE(bwparc_rrs(fin, nrow, ncol), r);
-  } else if (strcmp(argv[1], "bprs") == 0) {
-    // r = bwparc_rrs(fin, nrow, ncol);
-    TRACE(sbwparc_rrs(fd, nrow, ncol), r);
-  } else if (strcmp(argv[1], "bprm") == 0) {
-    // r = bwparc_rrs(fin, nrow, ncol);
-    TRACE(mbwparc_rrs(fd, nrow, ncol), r);
-  } else if (strcmp(argv[1], "spr") == 0) {
-    TRACE(wstagparc_rrs(argv[2], nrow, ncol), r);
-  } else if (strcmp(argv[1], "sprs") == 0) {
-    TRACE(swstagparc_rrs(argv[2], nrow, ncol), r);
-  } else if (strcmp(argv[1], "sprm") == 0) {
-    TRACE(mwstagparc_rrs(argv[2], nrow, ncol), r);
-  } else if (strcmp(argv[1], "srs") == 0) { // hidle
-    // r = wseq_rrs(fin, nrow, ncol);
-    TRACE(wseq_rrs(fin, nrow, ncol), r);
-  } else {
-    fprintf(stderr, "Usage: %s %s FILE\n", argv[0], _usage_args_);
-    return EXIT_FAILURE;
+  if (argc > 3 && strcmp(argv[3], "DUMP") == 0) {
+    DO_DUMP = 1;
   }
 
-  /*fclose(fin);*/
-
-  // if (r != NULL) {
-  //   for (size_t i = 0; i < ncol; i++) {
-  //     if (r[i]) {
-  //       PBWTAD_FREE(r[i]);
-  //     }
-  //   }
-  //   FREE(r);
-  // }
-
-#if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
-  // TODO: file cleanup
+#if defined(BF2IOMODE_BM)
+if (strcmp(argv[1], "linear-syscall") == 0) {
+  TRACE(sblinc(fd, nrow, ncol), r);
+} else if (strcmp(argv[1], "linear-mmap") == 0) {
+  TRACE(mblinc(fd, nrow, ncol), r);
+} else if (strcmp(argv[1], "sample-syscall") == 0) {
+  TRACE(swbapproxc_rrs(fd, nrow, ncol), r);
+} else if (strcmp(argv[1], "sample-mmap") == 0) {
+  TRACE(mwbapproxc_rrs(fd, nrow, ncol), r);
+} else if (strcmp(argv[1], "blockpar-syscall") == 0) {
+  TRACE(sbwparc_rrs(fd, nrow, ncol), r);
+} else if (strcmp(argv[1], "blockpar-mmap") == 0) {
+  TRACE(mbwparc_rrs(fd, nrow, ncol), r);
+} else if (strcmp(argv[1], "stagpar-syscall") == 0) {
+  TRACE(swstagparc_rrs(argv[2], nrow, ncol), r);
+} else if (strcmp(argv[1], "stagpar-mmap") == 0) {
+  TRACE(mwstagparc_rrs(argv[2], nrow, ncol), r);
 #elif defined(BF2IOMODE_BCF)
-  bcf_sr_destroy(sr);
-#else
+if (strcmp(argv[1], "linear") == 0) {
+  TRACE(linc(fin, nrow, ncol), r);
+} else if (strcmp(argv[1], "sampled") == 0) {
+  TRACE(wapproxc_rrs(fin, nrow, ncol), r);
+} else if (strcmp(argv[1], "blockpar") == 0) {
+  TRACE(wparc_rrs(fin, nrow, ncol), r);
+} else if (strcmp(argv[1], "stagpar") == 0) {
+  TRACE(wstagparc_rrs(argv[2], nrow, ncol), r);
 #endif
-
-  return EXIT_SUCCESS;
 }
-
-int maint(int argc, char *argv[]) {
-  if (argc < 2) {
-    fprintf(stderr, "Usage: %s [lin|ars|aqs|prs] FILE\n", argv[0]);
-    return EXIT_FAILURE;
-  }
-
-  FILE *fin = fopen(argv[2], "r");
-  if (!fin) {
-    perror("[main]");
-    return EXIT_FAILURE;
-  }
-  int ifin = open(argv[2], O_RDONLY);
-
-  size_t nrow, ncol;
-  fgetrc(fin, &nrow, &ncol);
-  DPRINT("[%s] row: %5zu, col: %5zu\n", __func__, nrow, ncol);
-
-  /*uint8_t *c0 = malloc(nrow * sizeof *c0);*/
-  /*sbfgetcoln(ifin, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*fgetcoli(fin, 0, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*sbfgetcoln(ifin, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*fgetcoli(fin, 1, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*sbfgetcoln(ifin, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*fgetcoli(fin, 2, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*sbfgetcoln(ifin, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*fgetcoli(fin, 3, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*sbfgetcoln(ifin, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*fgetcoli(fin, 4, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*sbfgetcoln(ifin, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-  /*fgetcoli(fin, 5, nrow, c0, ncol);*/
-  /*parr(nrow, c0, "%d ");*/
-
-  uint64_t *w0 = malloc(nrow * sizeof *w0);
-  sbfgetcolw64rn(ifin, nrow, w0, ncol);
-  parr(nrow, w0, "%llu ");
-  fgetcoliw64r(fin, 0, nrow, w0, ncol);
-  parr(nrow, w0, "%llu ");
-  sbfgetcolw64rn(ifin, nrow, w0, ncol);
-  parr(nrow, w0, "%llu ");
-  fgetcoliw64r(fin, 1, nrow, w0, ncol);
-  parr(nrow, w0, "%llu ");
-  sbfgetcolw64rn(ifin, nrow, w0, ncol);
-  parr(nrow, w0, "%llu ");
-  fgetcoliw64r(fin, 2, nrow, w0, ncol);
-  parr(nrow, w0, "%llu ");
-  return EXIT_SUCCESS;
+#if defined(BF2IOMODE_BCF)
+bcf_sr_destroy(sr);
+#endif
+return EXIT_SUCCESS;
 }

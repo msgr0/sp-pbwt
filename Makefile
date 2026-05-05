@@ -1,8 +1,7 @@
 CC?=cc
 CFLAGS?=-O3
 
-VPATH=lib/quadsort
-ALL=gen 2bfpbwt-bm 2bfpbwt-bcf
+ALL=gen sp-pbwt-bm sp-pbwt-bcf
 LIBOMP?=/opt/homebrew/opt/libomp
 HTSLIB?=/opt/htslib
 
@@ -38,19 +37,15 @@ leaks: ${ALL}
 %.o: %.c %.h
 	${CC} -c ${CFLAGS} ${CCINCL} $< -o $@
 
-2bfpbwt-enc: CCINCL=${LIBOMP_INCL}
-2bfpbwt-enc: 2bfpbwt.c ioenc.o
-	${CC} -o $@ ${CFLAGS} -DBF2IOMODE_ENC ${CCINCL} $(LDFLAGS) $^ 
-
-2bfpbwt-bm: CCINCL=${LIBOMP_INCL}
-2bfpbwt-bm: 2bfpbwt.c iobm.o
+sp-pbwt-bm: CCINCL=${LIBOMP_INCL}
+sp-pbwt-bm: sp-pbwt.c iobm.o
 	${CC} -o $@ ${CFLAGS} -DBF2IOMODE_BM ${CCINCL} $(LDFLAGS) $^ 
 
 iobcf.o: iobcf.c
 	${CC} -c ${CFLAGS} ${HTSLIB_INCL} $< -o $@ -lhts
 
-2bfpbwt-bcf: CCINCL=${LIBOMP_INCL} ${HTSLIB_INCL}
-2bfpbwt-bcf: 2bfpbwt.c iobcf.o
+sp-pbwt-bcf: CCINCL=${LIBOMP_INCL} ${HTSLIB_INCL}
+sp-pbwt-bcf: sp-pbwt.c iobcf.o
 	${CC} -o $@ ${CFLAGS} -DBF2IOMODE_BCF ${CCINCL} $(LDFLAGS) -lhts $^ 
 
 gen: gen.c

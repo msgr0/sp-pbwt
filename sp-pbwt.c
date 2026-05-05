@@ -174,46 +174,6 @@ struct pbwtad {
   size_t *d;
 };
 
-/*
- * Sort `c[n]`, sorted permutations will be in saved in `s[n]`,
- * using externally allocated `aux[n]` auxiliary array.
- * This version assumes the `s` array to be already initialized.
- */
-void rrsortx0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
-  size_t *tmp;
-  size_t j;
-  size_t *pre = s;
-  size_t *post = aux;
-  uint8_t b;
-
-  for (size_t i = 0; i < 8; i++) {
-    size_t cnt[256] = {0};
-
-    // frequencies
-    for (j = 0; j < n; j++) {
-      /*cnt[mask2(c[j], i)]++;*/
-      b = (c[j] >> (8 * i)) & 0xFFULL;
-      cnt[b]++;
-    }
-    // prefix sum
-    for (size_t j = 1; j < 256; j++)
-      cnt[j] += cnt[j - 1];
-    // sorting
-    for (ssize_t j = n - 1; j >= 0; --j) {
-      /*cnt[mask2(c[pre[j]], i)]--;*/
-      /*post[cnt[mask2(c[pre[j]], i)]] = pre[j];*/
-
-      b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
-      cnt[b]--;
-      post[cnt[b]] = pre[j];
-    }
-    // swap s and aux
-    tmp = pre;
-    pre = post;
-    post = tmp;
-  }
-}
-
 void rrsortx(size_t n, uint64_t *c, size_t *s, size_t *aux) {
   size_t *tmp;
   size_t j;
@@ -240,9 +200,6 @@ void rrsortx(size_t n, uint64_t *c, size_t *s, size_t *aux) {
       cnt[i][j] += cnt[i][j - 1];
     // sorting
     for (ssize_t j = n - 1; j >= 0; --j) {
-      /*cnt[mask2(c[pre[j]], i)]--;*/
-      /*post[cnt[mask2(c[pre[j]], i)]] = pre[j];*/
-
       b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
       cnt[i][b]--;
       post[cnt[i][b]] = pre[j];
@@ -271,7 +228,6 @@ void rrsortx_noaux(size_t n, uint64_t *c, size_t *s) {
 
     // frequencies
     for (j = 0; j < n; j++) {
-      /*cnt[mask2(c[j], i)]++;*/
       b = (c[j] >> (8 * i)) & 0xFFULL;
       cnt[b]++;
     }
@@ -280,9 +236,6 @@ void rrsortx_noaux(size_t n, uint64_t *c, size_t *s) {
       cnt[j] += cnt[j - 1];
     // sorting
     for (ssize_t j = n - 1; j >= 0; --j) {
-      /*cnt[mask2(c[pre[j]], i)]--;*/
-      /*post[cnt[mask2(c[pre[j]], i)]] = pre[j];*/
-
       b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
       cnt[b]--;
       post[cnt[b]] = pre[j];
@@ -323,7 +276,6 @@ void rrsort0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
 
     // frequencies
     for (j = 0; j < n; j++) {
-      /*cnt[mask2(c[j], i)]++;*/
       b = (c[j] >> (8 * i)) & 0xFFULL;
       cnt[b]++;
     }
@@ -332,9 +284,6 @@ void rrsort0(size_t n, uint64_t *c, size_t *s, size_t *aux) {
       cnt[j] += cnt[j - 1];
     // sorting
     for (ssize_t j = n - 1; j >= 0; --j) {
-      /*cnt[mask2(c[pre[j]], i)]--;*/
-      /*post[cnt[mask2(c[pre[j]], i)]] = pre[j];*/
-
       b = (c[pre[j]] >> (8 * i)) & 0xFFULL;
       cnt[b]--;
       post[cnt[b]] = pre[j];
@@ -366,7 +315,6 @@ void reversecprev(pbwtad *p, pbwtad *pp, pbwtad *rev, size_t n) {
   for (size_t i = 0; i < n; i++) {
     rev->a[p->a[i]] = i;
     rev->d[p->a[i]] = pp->d[i]; // == p->d[rev->a[i]]
-    // assert(rev->d[p->a[i]] == pp->d[rev->a[p->a[i]]]);
   }
 }
 
@@ -407,28 +355,6 @@ void divc0(size_t n, uint64_t *c, pbwtad *p) {
   }
 }
 
-/*
- * computes the divergence of the last <=64 window (hence it could be padded
- */
-// void divc_last(size_t n, uint64_t *c, pbwtad *p, pbwtad *ppr, pbwtad *prev,
-//                pbwtad *pprrev,
-//                size_t w) { // WARN: afteer some correction code seems to be
-//                            // similar to divc(), check and merge
-//   static int8_t kk = 0;
-//   uint64_t x = 0;
-//   // size_t w = 64;
-//   size_t div;
-//   p->d[0] = 0;
-//   for (size_t i = 1; i < n; i++) {
-//     x = c[p->a[i]] ^ c[p->a[i - 1]];
-//     div = x ? __builtin_clzll(x) - (W - w) : w;
-//     // if (div > w) div = 64 - div;
-//     p->d[i] = (div >= w) ? recover_div(n, w, p->a[i], p->a[i - 1], c, p, ppr,
-//                                        prev, pprrev)
-//                          : div;
-//   }
-//   kk += W;
-// }
 /*
  * Computes the divergence of a generic w64 window;
  * LCP values equal to the window size get recoverd by recover_div function
@@ -473,71 +399,6 @@ static inline pbwtad *pbwtad_new(size_t n) {
     FREE(p);                                                                   \
   } while (0)
 
-// msgr0's version (Durbin's linear pbwt)
-// c[n] is a pointer to the column
-// p is the `pbwtad` of A and D arrays of the previous column
-// return: `pbwtad` of the current column
-pbwtad *cpbwt_0(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
-  // NOTE: these two arrays do not need be allocated and free'd each time.
-  // it would be possible to allocate it once (per process)
-  // and re-use them each time.
-  size_t *z = malloc(n * sizeof *z);
-  size_t *o = malloc(n * sizeof *o);
-  size_t *zd = malloc(n * sizeof *zd);
-  size_t *od = malloc(n * sizeof *od);
-
-  pbwtad *ret = malloc(sizeof *ret);
-  size_t *a = malloc(n * sizeof *a);
-  size_t *d = malloc(n * sizeof *d);
-
-  if (!z || !o || !a) {
-    // FIXME: error
-    return NULL;
-  }
-  size_t r = 0, q = 0;
-  size_t f = n, g = n;
-
-  size_t i;
-  for (i = 0; i < n; i++) {
-
-    if (c[p->d[i]] > f) {
-      f = c[p->d[i]];
-    }
-    if (c[p->d[i]] > g) {
-      g = c[p->d[i]];
-    }
-
-    if (c[p->a[i]] == 1) {
-      o[q] = p->a[i];
-      od[q++] = g = 0;
-      g = 0;
-    } else {
-      z[r] = p->a[i];
-      zd[r++] = f;
-      f = 0;
-    }
-  }
-
-  assert(r + q == n);
-  for (i = 0; i < r; i++) {
-    a[i] = z[i];
-    d[i] = zd[i];
-  }
-  for (i = 0; i < q; i++) {
-    a[r + i] = o[i];
-    d[r + i] = od[i];
-  }
-
-  FREE(o);
-  FREE(z);
-  FREE(zd);
-  FREE(od);
-
-  ret->a = a;
-  ret->d = d;
-  return ret;
-}
-
 /*
  * Given the current column index, swaps divergence values
  * between LCP and starting position of a match.
@@ -557,11 +418,7 @@ void swapdiv(pbwtad *p, size_t n, size_t k) {
   }
 }
 
-/* BUG: (possibily?, needs testing)
- * use cpbwt std version (withtout *LCP) and then swap divergence
- * with swapdiv if necessary.
- */
-static pbwtad *cpbwtLCP(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
+static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
   static size_t *o = NULL;
   static size_t *h = NULL;
   static size_t k = 1;
@@ -597,77 +454,6 @@ static pbwtad *cpbwtLCP(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
     q += mask;        // Increment q if mask is 1
     r += mask ^ 1;    // Increment r if mask is 0
   }
-  memcpy(ret->a + r, o, q * sizeof(size_t));
-  memcpy(ret->d + r, h, q * sizeof(size_t));
-
-  // correct div computation for DIV as LCP
-  //
-  for (size_t t = 0; t < n; t++) {
-    ret->d[t] = 1 + k - ret->d[t];
-  }
-  k++;
-
-  return ret;
-}
-
-static pbwtad *cpbwt(size_t n, uint8_t *restrict c, pbwtad *restrict p) {
-  static size_t *o = NULL;
-  static size_t *h = NULL;
-  static size_t k = 1;
-
-  if (!o)
-    o = malloc(n * sizeof *o);
-  if (!h)
-    h = malloc(n * sizeof *h);
-
-  pbwtad *ret = malloc(sizeof *ret);
-  ret->a = malloc(n * sizeof *(ret->a));
-  ret->d = malloc(n * sizeof *(ret->d));
-
-  size_t r = 0, q = 0;
-  size_t f = k, g = k;
-
-  size_t i;
-#if 0
-  for (i = 0; i < n; i++) {
-    /*printf("i: %6zu - p->a[i]: %zu\n", i, p->a[i]);*/
-    if (c[p->a[i]] == 1) {
-      o[q++] = p->a[i];
-    } else {
-      ret->a[r++] = p->a[i];
-      /*z[r++] = p->a[i];*/
-    }
-  }
-#else
-  for (i = 0; i < n; i++) {
-    size_t idx = p->a[i];
-    size_t ddx = p->d[i];
-
-    f = (ddx > f) ? ddx : f;
-    g = (ddx > g) ? ddx : g;
-
-    size_t mask = c[idx];
-    o[q] = idx;
-    ret->a[r] = idx;
-#if 0
-    if (mask) {
-      h[q] = g;
-      g = 0;
-    } else {
-      ret->d[r] = f;
-      f = 0;
-    }
-#else
-    h[q] = g;
-    ret->d[r] = f;
-
-    f &= -mask;       // f = 0 if mask == 0, unchanged if mask == 1
-    g &= -(1 - mask); // g = 0 if mask == 1, unchanged if mask == 0
-#endif
-    q += mask;     // Increment q if mask is 1
-    r += mask ^ 1; // Increment r if mask is 0
-  }
-#endif
 
   memcpy(ret->a + r, o, q * sizeof(size_t));
   memcpy(ret->d + r, h, q * sizeof(size_t));
@@ -684,11 +470,9 @@ static int cpbwtiLCP(size_t n, size_t k, uint8_t *restrict c,
                      pbwtad *restrict pp, pbwtad *restrict pc) {
   static size_t *o = NULL;
   static size_t *h = NULL;
-  // static size_t k = 1;
 
   swapdiv(pp, n, k - 1);
   size_t nrow = n;
-  // PDUMP(k, pp);
   if (!o)
     o = malloc(n * sizeof *o);
   if (!h)
@@ -720,7 +504,6 @@ static int cpbwtiLCP(size_t n, size_t k, uint8_t *restrict c,
   memcpy(pc->a + r, o, q * sizeof(size_t));
   memcpy(pc->d + r, h, q * sizeof(size_t));
 
-  // PDUMP(k, pc);
   swapdiv(pc, n, k);
   return 1;
 }
@@ -766,64 +549,6 @@ static int cpbwti(size_t n, uint8_t *restrict c, pbwtad *restrict pp,
   return 1;
 }
 
-static pbwtad *cpbwtk(size_t n, uint8_t *restrict c, pbwtad *restrict p,
-                      size_t k) {
-  static size_t *o = NULL;
-  static size_t *h = NULL;
-
-  if (!o)
-    o = malloc(n * sizeof *o);
-  if (!h)
-    h = malloc(n * sizeof *h);
-
-  pbwtad *ret = malloc(sizeof *ret);
-  ret->a = malloc(n * sizeof *(ret->a));
-  ret->d = malloc(n * sizeof *(ret->d));
-
-  size_t r = 0, q = 0;
-  size_t f = k, g = k;
-
-  size_t i;
-#if 0
-  for (i = 0; i < n; i++) {
-    /*printf("i: %6zu - p->a[i]: %zu\n", i, p->a[i]);*/
-    if (c[p->a[i]] == 1) {
-      o[q++] = p->a[i];
-    } else {
-      ret->a[r++] = p->a[i];
-      /*z[r++] = p->a[i];*/
-    }
-  }
-#else
-  for (i = 0; i < n; i++) {
-    size_t idx = p->a[i];
-    size_t ddx = p->d[i];
-
-    f = (ddx > f) ? ddx : f;
-    g = (ddx > g) ? ddx : g;
-
-    size_t mask = c[idx];
-    o[q] = idx;
-    ret->a[r] = idx;
-
-    if (mask) {
-      h[q] = g;
-      g = 0;
-    } else {
-      ret->d[r] = f;
-      f = 0;
-    }
-    q += mask;     // Increment q if mask is 1
-    r += mask ^ 1; // Increment r if mask is 0
-  }
-#endif
-
-  memcpy(ret->a + r, o, q * sizeof(size_t));
-  memcpy(ret->d + r, h, q * sizeof(size_t));
-
-  return ret;
-}
-
 #define TEST_LOG
 
 #ifdef TEST_LOG
@@ -855,7 +580,6 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
     p0->d[j] = 0;
   }
   fgetcoli(fin, 0, nrow, c0, ncol);
-  // pl[0] = cpbwtk(nrow, c0, p0, 1);
   cpbwti(nrow, c0, p0, p1);
   PDUMP(0, p1);
   SWAP(p0, p1);
@@ -879,32 +603,7 @@ pbwtad **linc(void *fin, size_t nrow, size_t ncol) {
   FREE(c0);
   return NULL;
 }
-pbwtad **blinc(void *fin, size_t nrow, size_t ncol) {
-  uint8_t *c0 = malloc(nrow * sizeof *c0);
 
-  pbwtad *p0 = pbwtad_new(nrow);
-  pbwtad *p1 = pbwtad_new(nrow);
-  for (int j = 0; j < nrow; j++) {
-    p0->a[j] = j;
-    p0->d[j] = 0;
-  }
-  bfgetcoln(fin, nrow, c0, ncol);
-  cpbwti(nrow, c0, p0, p1);
-  PDUMP(0, p1);
-  SWAP(p0, p1);
-
-  for (size_t j = 1; j < ncol; j++) {
-    bfgetcoln(fin, nrow, c0, ncol);
-    cpbwti(nrow, c0, p0, p1);
-    PDUMP(j, p1);
-    SWAP(p0, p1);
-  }
-
-  PBWTAD_FREE(p0);
-  PBWTAD_FREE(p1);
-  FREE(c0);
-  return NULL;
-}
 pbwtad **sblinc(int fin, size_t nrow, size_t ncol) {
   uint8_t *c0 = malloc(nrow * sizeof *c0);
 
@@ -1017,10 +716,8 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { // ARS
             aux); // radix sorting pbwt->a with auxiliary array
     reversec(pbwt, pbwtRev,
              nrow); // computing reversec after sorting the new array
-    divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev,
-         W); // FIXME: check divc comment, pbwtRev could be removed.
+    divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, W);
     PDUMPR(W * (j + 1) - 1, pbwt);
-    // CDUMP(W * (j+1) - 1, w64);
     k++;
     j++;
   }
@@ -1043,20 +740,16 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { // ARS
 #error UNDEFINED BEHAVIOUR
 #endif
   // last column needs special handling, since it is < W
-  // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
   memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
   memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
   rrsortx(nrow, w64, pbwt->a, aux);
   memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
   memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
   reversec(pbwt, pbwtRev, nrow);
-  // PDUMPR(W * (j + 1) - 1, pbwt);
-  // printf("last w has width:%zu\n", ncol - j);
   divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, ncol - j);
   PDUMPR(ncol - 1, pbwt);
 
   PBWTAD_FREE(pbwt);
-  // FREE(c0);
   FREE(pbwt);
   FREE(pbwtRev);
   FREE(pbwtPr);
@@ -1066,46 +759,9 @@ pbwtad **wapproxc_rrs(void *fin, size_t nrow, size_t ncol) { // ARS
   return NULL;
 }
 
-pbwtad **wbapproxc_rrs(void *fin, size_t nrow, size_t ncol) {
-  // Compute the bit-packed windows
-  uint64_t *pw = malloc(nrow * sizeof *pw);
-  size_t *aux = malloc(nrow * sizeof *aux);
-
-  pbwtad *p0 = pbwtad_new(nrow);
-  pbwtad *p1 = pbwtad_new(nrow);
-  bfgetcolw64rn(fin, nrow, pw, ncol);
-  rrsort0(nrow, pw, p1->a, aux);
-  PDUMP(W - 1, p1);
-  SWAP(p0, p1);
-
-  size_t j;
-  for (j = 1; j * W <= ncol - W; j++) {
-    memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
-    bfgetcolw64rn(fin, nrow, pw, ncol);
-    rrsortx(nrow, pw, p1->a, aux);
-    PDUMP(W * (j + 1) - 1, p1);
-    SWAP(p0, p1);
-  }
-
-  uint8_t *c0 = NULL;
-  j *= W;
-  fgetcolwgri(fin, j, nrow, pw, ncol, ncol - j);
-  memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
-  rrsortx(nrow, pw, p1->a, aux);
-  PDUMP(ncol - 1, p1);
-
-  PBWTAD_FREE(p0);
-  PBWTAD_FREE(p1);
-  FREE(c0);
-  FREE(pw);
-  FREE(aux);
-  return NULL;
-}
-
 pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) { // BARS
   // Compute the bit-packed windows
   uint64_t *w64 = malloc(nrow * sizeof *w64);
-  // uint64_t *xor = malloc(nrow * sizeof *xor);
   size_t *aux = malloc(nrow * sizeof *aux);
 
   pbwtad *pbwt = pbwtad_new(nrow);
@@ -1130,17 +786,12 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) { // BARS
     sbfgetcolw64rn(fin, nrow, w64, ncol);
     memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
     memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
-    rrsortx(nrow, w64, pbwt->a, aux); // BUG: pbwtPr->d doesnt contain anything.
-    // FIXME: moved reversec after rrsortx, could now be integrated in rrsortx
-    // as #1 pull request;
+    rrsortx(nrow, w64, pbwt->a, aux);
     memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
     memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
     reversec(pbwt, pbwtRev, nrow);
-    // PDUMPR(W * (j + 1) - 1, pbwt);
     divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, W);
-    // reversec(p0, prev, nrow);
     PDUMPR(W * (j + 1) - 1, pbwt);
-    // SWAP(p0, p1);
     k++;
   }
 
@@ -1149,14 +800,12 @@ pbwtad **swbapproxc_rrs(int fin, size_t nrow, size_t ncol) { // BARS
   sfgetcolwgri(fin, j, nrow, w64, ncol, ncol - j);
 
   // last column needs special handling, since it is < W
-  // memcpy(p1->a, p0->a, nrow * sizeof *(p1->a));
   memcpy(pbwtPr->a, pbwt->a, nrow * sizeof *(pbwt->a));
   memcpy(pbwtPr->d, pbwt->d, nrow * sizeof *(pbwt->d));
   rrsortx(nrow, w64, pbwt->a, aux);
   memcpy(pbwtPrRev->a, pbwtRev->a, nrow * sizeof *(pbwtRev->a));
   memcpy(pbwtPrRev->d, pbwtRev->d, nrow * sizeof *(pbwtRev->d));
   reversec(pbwt, pbwtRev, nrow);
-  // PDUMPR(W * (j + 1) - 1, pbwt);
   divc(nrow, w64, pbwt, pbwtPr, pbwtRev, pbwtPrRev, ncol - j);
   PDUMPR(ncol - 1, pbwt);
 
@@ -1182,8 +831,6 @@ pbwtad **mwbapproxc_rrs(int fin, size_t nrow, size_t ncol) { // BARM
   sbfgetcolw64rn_mmap(fin, nrow, pw, ncol);
   rrsort0(nrow, pw, p0->a, aux);
 
-  // memcpy(p1rev->a, p0rev->a, nrow * sizeof *(p0rev->a));
-  // memcpy(p1rev->d, p0rev->d, nrow * sizeof *(p0rev->d));
   reversec(p0, p0rev, nrow);
   divc0(nrow, pw, p0);
   PDUMPR(W - 1, p0);
@@ -1330,9 +977,7 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) { // PRS
       divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
       FREE(w);
     }
-    PDUMP_SEQ_OFFSETR(0, W, pb1,
-                      W * j); // FIXME: print here should be rewritten
-                              // for LCP display as divergence
+    PDUMP_SEQ_OFFSETR(0, W, pb1, W * j);
     SWAP(pw0, pw1);
     SWAP(pb0, pb1);
     SWAP(pb0rev, pb1rev);
@@ -1353,10 +998,6 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) { // PRS
 #if defined(BF2IOMODE_BM) || defined(BF2IOMODE_ENC)
     fgetcoli(fin, j, nrow, c0, ncol);
 #elif defined(BF2IOMODE_BCF)
-    // no need to read here as it is already updated in failed condition
-    // of the reading while
-    // WARN: if something goes wrong this should be the first place to
-    // investigate, it seems correct but I'm not 100% sure
     for (size_t _i = 0; _i < nrow; _i++) {
       c0[_i] = (pw1[_i] >> wix) & 0x1;
     }
@@ -1364,8 +1005,6 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) { // PRS
 #else
 #error UNDEFINED BEHAVIOUR
 #endif
-    // if ((j/W) % W == 3) swapdiv(pp1, nrow, j);
-    // if ((j/W) % W == 2) swapdiv(pp0, nrow, j);
     cpbwtiLCP(nrow, j, c0, pp0, pp1);
     PDUMPR(j, pp1);
     SWAP(pp0, pp1);
@@ -1385,127 +1024,8 @@ pbwtad **wparc_rrs(void *fin, size_t nrow, size_t ncol) { // PRS
   FREE(c0);
   return NULL;
 }
-pbwtad **bwparc_rrs(void *fin, size_t nrow, size_t ncol) { // BPR
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
-  pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
-  pbwtad **pb0rev = malloc(W * sizeof(pbwtad *));
-  pbwtad **pb1 = malloc(W * sizeof(pbwtad *));
-  pbwtad **pb1rev = malloc(W * sizeof(pbwtad *));
 
-  uint8_t *c0 = malloc(nrow * sizeof *c0);
-  pbwtad *p0 = pbwtad_new(nrow);
-  for (int j = 0; j < nrow; j++) {
-    p0->a[j] = j;
-    p0->d[j] = 0;
-  }
-
-  fgetcoli(fin, 0, nrow, c0, ncol);
-  pb0[0] = cpbwt(nrow, c0, p0);
-  pb0rev[0] = p0;
-  PDUMP(0, pb0[0]);
-  // PBWTAD_FREE(p0);
-
-  for (int j = 1; j < W; j++) {
-    fgetcoli(fin, j, nrow, c0, ncol);
-    pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
-    pb0rev[j] = pbwtad_new(nrow);
-    reversecprev(pb0[j], pb0[j - 1], pb0rev[j], nrow);
-    PDUMP(j, pb0[j]);
-  }
-
-  /* swapping div values with LCP for window computation */
-  for (int j = 0; j < W; j++) {
-    swapdiv(pb0[j], nrow, j);
-    swapdiv(pb0rev[j], nrow, j);
-    // PDUMP(j, pb0[j]);
-  }
-
-  uint64_t *pw0 = malloc(nrow * sizeof *pw0);
-  uint64_t *pw1 = malloc(nrow * sizeof *pw1);
-  size_t *aux = malloc(nrow * sizeof *aux);
-  bfgetcolw64rn(fin, nrow, pw0, ncol);
-
-  // pb0 is now filled with computed values,
-  // to allow reusing I need to fill pb1 with empty values
-  for (int j = 0; j < W; j++) {
-    pb1[j] = pbwtad_new(nrow);
-    pb1rev[j] = pbwtad_new(nrow);
-  }
-
-  size_t j;
-
-  for (j = 1; j * W <= ncol - W; j++) {
-    bfgetcolw64rn(fin, nrow, pw1, ncol);
-    pbwtad *ps = pb1[W - 1];
-    pbwtad *psrev = pb1rev[W - 1];
-    memcpy(ps->a, pb0[W - 1]->a, nrow * sizeof *(ps->a));
-    memcpy(ps->d, pb0[W - 1]->d, nrow * sizeof *(ps->d));
-    memcpy(psrev->a, pb0rev[W - 1]->a, nrow * sizeof *(ps->a));
-    memcpy(psrev->d, pb0rev[W - 1]->d, nrow * sizeof *(ps->d));
-    rrsortx(nrow, pw1, ps->a, aux);
-    reversec(ps, psrev, nrow);
-    divc(nrow, pw1, ps, pb0[W - 1], psrev, pb0rev[W - 1], W);
-
-    // pbwtad *ps = pbwtad_new(nrow);
-    // pb[W * (j + 1) - 1] = ps;
-    // memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
-    // rrsortx(nrow, pw1, ps->a, aux);
-
-#pragma omp parallel for shared(pw1, pw0, pb0, pb1, j)
-    for (size_t x = 1; x < W; x++) {
-      uint64_t *w = malloc(nrow * sizeof *w);
-      size_t J = W - 1;
-
-      wr64mrgsi(nrow, pw1, pw0, w, x);
-      pbwtad *ps = pb1[J - x];
-      pbwtad *psrev = pb1rev[J - x];
-      // pbwtad *ps = pbwtad_new(nrow);
-      // pb[J - x] = ps;
-      memcpy(ps->a, pb0[J - x]->a, nrow * sizeof *(ps->a));
-      memcpy(ps->d, pb0[J - x]->d, nrow * sizeof *(ps->d));
-      memcpy(psrev->a, pb0[J - x]->a, nrow * sizeof *(psrev->a));
-      memcpy(psrev->d, pb0rev[J - x]->a, nrow * sizeof *(psrev->d));
-      // memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
-      rrsortx_noaux(nrow, w, ps->a);
-      reversec(ps, psrev, nrow);
-      divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
-      FREE(w);
-    }
-    PDUMP_SEQ_OFFSETR(0, W, pb1, W * j);
-    // PDUMP_SEQ(W * j - 1, W * (j + 1) - 1, pb1);
-    SWAP(pw0, pw1);
-    SWAP(pb0, pb1);
-    SWAP(pb0rev, pb1rev);
-    // j++;
-  }
-
-  pbwtad *pp0, *pp1;
-  pp0 = pb0[W - 1];
-  pp1 = pb0[W - 2];
-
-  for (j = j * W; j < ncol; j++) {
-    fgetcoli(fin, j, nrow, c0, ncol);
-    cpbwtiLCP(nrow, j, c0, pp0, pp1);
-    PDUMPR(j, pp1);
-    SWAP(pp0, pp1);
-    // pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    // PDUMP(j, pb[j]);
-  }
-  for (int j = 0; j < W; j++) {
-    PBWTAD_FREE(pb0[j]);
-    PBWTAD_FREE(pb1[j]);
-  }
-  FREE(pb0);
-  FREE(pb1);
-  FREE(pw0);
-  FREE(aux);
-  FREE(c0);
-  return NULL;
-}
-
-// bpr with syscall
-pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
+pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) {
   // NOTE: right now I don't know what I need, so I'm keeping
   // everything in memory, we'll see later
   pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
@@ -1529,7 +1049,6 @@ pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
   // PBWTAD_FREE(p0);
 
   for (int j = 1; j < W; j++) {
-    // sbfgetcoln(fin, nrow, c0, ncol);
     fgetcoli(ffin, j, nrow, c0, ncol);
     pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
     pb0rev[j] = pbwtad_new(nrow);
@@ -1541,7 +1060,6 @@ pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
   for (int j = 0; j < W; j++) {
     swapdiv(pb0[j], nrow, j);
     swapdiv(pb0rev[j], nrow, j);
-    // PDUMP(j, pb0[j]);
   }
 
   uint64_t *pw0 = malloc(nrow * sizeof *pw0);
@@ -1570,11 +1088,6 @@ pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
     reversec(ps, psrev, nrow);
     divc(nrow, pw1, ps, pb0[W - 1], psrev, pb0rev[W - 1], W);
 
-    // pbwtad *ps = pbwtad_new(nrow);
-    // pb[W * (j + 1) - 1] = ps;
-    // memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
-    // rrsortx(nrow, pw1, ps->a, aux);
-
 #pragma omp parallel for shared(pw1, pw0, pb0, pb1, j)
     for (size_t x = 1; x < W; x++) {
       uint64_t *w = malloc(nrow * sizeof *w);
@@ -1583,39 +1096,30 @@ pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
       wr64mrgsi(nrow, pw1, pw0, w, x);
       pbwtad *ps = pb1[J - x];
       pbwtad *psrev = pb1rev[J - x];
-      // pbwtad *ps = pbwtad_new(nrow);
-      // pb[J - x] = ps;
       memcpy(ps->a, pb0[J - x]->a, nrow * sizeof *(ps->a));
       memcpy(ps->d, pb0[J - x]->d, nrow * sizeof *(ps->d));
       memcpy(psrev->a, pb0[J - x]->a, nrow * sizeof *(psrev->a));
       memcpy(psrev->d, pb0rev[J - x]->a, nrow * sizeof *(psrev->d));
-      // memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
       rrsortx_noaux(nrow, w, ps->a);
       reversec(ps, psrev, nrow);
       divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
       FREE(w);
     }
     PDUMP_SEQ_OFFSETR(0, W, pb1, W * j);
-    // PDUMP_SEQ(W * j - 1, W * (j + 1) - 1, pb1);
     SWAP(pw0, pw1);
     SWAP(pb0, pb1);
     SWAP(pb0rev, pb1rev);
-    // j++;
   }
 
   pbwtad *pp0, *pp1;
   pp0 = pb0[W - 1];
   pp1 = pb0[W - 2];
 
-  // sbfgetcoln(0, j * W, NULL, 0);
   for (j = j * W; j < ncol; j++) {
-    // sbfgetcoln(fin, nrow, c0, ncol);
     fgetcoli(ffin, j, nrow, c0, ncol);
     cpbwtiLCP(nrow, j, c0, pp0, pp1);
     PDUMPR(j, pp1);
     SWAP(pp0, pp1);
-    // pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    // PDUMP(j, pb[j]);
   }
   for (int j = 0; j < W; j++) {
     PBWTAD_FREE(pb0[j]);
@@ -1630,8 +1134,6 @@ pbwtad **sbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRS
 }
 
 pbwtad **mbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRM
-  // NOTE: right now I don't know what I need, so I'm keeping
-  // everything in memory, we'll see later
   pbwtad **pb0 = malloc(W * sizeof(pbwtad *));
   pbwtad **pb0rev = malloc(W * sizeof(pbwtad *));
   pbwtad **pb1 = malloc(W * sizeof(pbwtad *));
@@ -1646,14 +1148,11 @@ pbwtad **mbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRM
 
   FILE *ffin = fdopen(fin, "r");
   fgetcoli(ffin, 0, nrow, c0, ncol);
-  // mbfgetcoln(fin, nrow, c0, ncol);
   pb0[0] = cpbwt(nrow, c0, p0);
   pb0rev[0] = p0;
   PDUMP(0, pb0[0]);
-  // PBWTAD_FREE(p0);
 
   for (int j = 1; j < W; j++) {
-    // mbfgetcoln(fin, nrow, c0, ncol);
     fgetcoli(ffin, j, nrow, c0, ncol);
     pb0[j] = cpbwt(nrow, c0, pb0[j - 1]);
     pb0rev[j] = pbwtad_new(nrow);
@@ -1665,7 +1164,6 @@ pbwtad **mbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRM
   for (int j = 0; j < W; j++) {
     swapdiv(pb0[j], nrow, j);
     swapdiv(pb0rev[j], nrow, j);
-    // PDUMP(j, pb0[j]);
   }
 
   uint64_t *pw0 = malloc(nrow * sizeof *pw0);
@@ -1684,7 +1182,6 @@ pbwtad **mbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRM
   size_t j;
 
   for (j = 1; j * W <= ncol - W; j++) {
-    // bfgetcolw64rn(fin, nrow, pw1, ncol);
     sbfgetcolw64rn_mmap(fin, nrow, pw1, ncol);
     pbwtad *ps = pb1[W - 1];
     pbwtad *psrev = pb1rev[W - 1];
@@ -1696,11 +1193,6 @@ pbwtad **mbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRM
     reversec(ps, psrev, nrow);
     divc(nrow, pw1, ps, pb0[W - 1], psrev, pb0rev[W - 1], W);
 
-    // pbwtad *ps = pbwtad_new(nrow);
-    // pb[W * (j + 1) - 1] = ps;
-    // memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
-    // rrsortx(nrow, pw1, ps->a, aux);
-
 #pragma omp parallel for shared(pw1, pw0, pb0, pb1, j)
     for (size_t x = 1; x < W; x++) {
       uint64_t *w = malloc(nrow * sizeof *w);
@@ -1709,39 +1201,30 @@ pbwtad **mbwparc_rrs(int fin, size_t nrow, size_t ncol) { // BPRM
       wr64mrgsi(nrow, pw1, pw0, w, x);
       pbwtad *ps = pb1[J - x];
       pbwtad *psrev = pb1rev[J - x];
-      // pbwtad *ps = pbwtad_new(nrow);
-      // pb[J - x] = ps;
       memcpy(ps->a, pb0[J - x]->a, nrow * sizeof *(ps->a));
       memcpy(ps->d, pb0[J - x]->d, nrow * sizeof *(ps->d));
       memcpy(psrev->a, pb0[J - x]->a, nrow * sizeof *(psrev->a));
       memcpy(psrev->d, pb0rev[J - x]->a, nrow * sizeof *(psrev->d));
-      // memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
       rrsortx_noaux(nrow, w, ps->a);
       reversec(ps, psrev, nrow);
       divc(nrow, w, ps, pb0[J - x], psrev, pb0rev[J - x], W);
       FREE(w);
     }
     PDUMP_SEQ_OFFSETR(0, W, pb1, W * j);
-    // PDUMP_SEQ(W * j - 1, W * (j + 1) - 1, pb1);
     SWAP(pw0, pw1);
     SWAP(pb0, pb1);
     SWAP(pb0rev, pb1rev);
-    // j++;
   }
 
   pbwtad *pp0, *pp1;
   pp0 = pb0[W - 1];
   pp1 = pb0[W - 2];
 
-  // mbfgetcoln(0, j * W, NULL, 0);
   for (j = j * W; j < ncol; j++) {
     fgetcoli(ffin, j, nrow, c0, ncol);
-    // mbfgetcoln(fin, nrow, c0, ncol);
     cpbwtiLCP(nrow, j, c0, pp0, pp1);
     PDUMPR(j, pp1);
     SWAP(pp0, pp1);
-    // pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-    // PDUMP(j, pb[j]);
   }
   for (int j = 0; j < W; j++) {
     PBWTAD_FREE(pb0[j]);
@@ -1807,7 +1290,6 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   fgetcoli(fin, 0, nrow, c0, ncol);
   cpbwti(nrow, c0, pb[0], pb[1]);
-  // PDUMP(0, pb[1]);
 
   for (size_t j = 1; j < W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
@@ -1864,7 +1346,6 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
       memcpy(pt0->a, pb[lane]->a, nrow * sizeof *(pb[lane]->a));
       memcpy(pt0->d, pb[lane]->d, nrow * sizeof *(pb[lane]->d));
 
-      // swapdiv(pt0, nrow, lane+1);
       reversec(pt0, pt0rev, nrow);
 
       for (size_t j = lane; j + W <= ncol; j += W) {
@@ -1889,7 +1370,6 @@ pbwtad **wstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPR
 #pragma omp critical
         {
           PDUMPR(j + W - 1, pt0);
-          // PDUMPR(j+W -1, pt1);
         }
 #endif
       }
@@ -1936,7 +1416,6 @@ pbwtad **swstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPRS
   uint8_t *c0 = malloc(nrow * sizeof *c0);
   fgetcoli(fin, 0, nrow, c0, ncol);
   cpbwti(nrow, c0, pb[0], pb[1]);
-  // PDUMP(0, pb[1]);
 
   for (size_t j = 1; j < W; j++) {
     fgetcoli(fin, j, nrow, c0, ncol);
@@ -1960,9 +1439,6 @@ pbwtad **swstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPRS
 
     size_t start = tid * base + (tid < rem ? tid : rem);
     size_t count = base + (tid < rem ? 1 : 0);
-    // fprintf(stderr, ">>>%zu, %zu, %zu, %zu, %zu, %zu\n\n", tid, nthreads,
-    // base,
-    //         rem, start, count);
     pbwtad *pt0 = pbwtad_new(nrow);
     pbwtad *pt0rev = pbwtad_new(nrow);
     pbwtad *pt1 = pbwtad_new(nrow);
@@ -2082,9 +1558,6 @@ pbwtad **mwstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPRM
 
     size_t start = tid * base + (tid < rem ? tid : rem);
     size_t count = base + (tid < rem ? 1 : 0);
-    // fprintf(stderr, ">>>%zu, %zu, %zu, %zu, %zu, %zu\n\n", tid, nthreads,
-    // base,
-    //         rem, start, count);
     pbwtad *pt0 = pbwtad_new(nrow);
     pbwtad *pt0rev = pbwtad_new(nrow);
     pbwtad *pt1 = pbwtad_new(nrow);
@@ -2130,74 +1603,6 @@ pbwtad **mwstagparc_rrs(char *fpath, size_t nrow, size_t ncol) { // SPRM
     FREE(aux);
     FREE(pw);
   }
-  FREE(c0);
-  // mmunmap
-  return pb;
-}
-
-pbwtad **wseq_rrs(FILE *fin, size_t nrow, size_t ncol) {
-  pbwtad **pb = malloc(ncol * sizeof(pbwtad *));
-
-  uint8_t *c0 = malloc(nrow * sizeof *c0);
-  pbwtad *p0 = malloc(sizeof *p0);
-  p0->a = malloc(nrow * sizeof *(p0->a));
-  for (int j = 0; j < nrow; j++) {
-    p0->a[j] = j;
-  }
-  fgetcoli(fin, 0, nrow, c0, ncol);
-  pb[0] = cpbwt_0(nrow, c0, p0);
-  FREE(p0->a);
-  FREE(p0);
-
-  for (int j = 1; j < W; j++) {
-    fgetcoli(fin, j, nrow, c0, ncol);
-    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-  }
-
-  uint64_t *pw0 = malloc(nrow * sizeof *pw0);
-  uint64_t *pw1 = malloc(nrow * sizeof *pw1);
-  size_t *aux = malloc(nrow * sizeof *aux);
-  fgetcoliw64r(fin, 0, nrow, pw0, ncol);
-
-  size_t j;
-
-  /*for (j = 1; j * W <= W * 2; j++) {*/
-  for (j = 1; j * W <= ncol - W; j++) {
-    fprintf(stderr, "\r%10zu/%zu", (j * W) + 1, ncol);
-    pbwtad *ps = malloc(nrow * sizeof *ps);
-    ps->a = malloc(nrow * sizeof *(ps->a));
-    pb[W * (j + 1) - 1] = ps;
-    memcpy(ps->a, pb[W * j - 1]->a, nrow * sizeof *(ps->a));
-    fgetcoliw64r(fin, j, nrow, pw1, ncol);
-    rrsortx(nrow, pw1, ps->a, aux);
-
-    for (size_t x = 1; x < W; x++) {
-
-      uint64_t *w = malloc(nrow * sizeof *w);
-      size_t J = W * (j + 1) - 1;
-
-      wr64mrgsi(nrow, pw1, pw0, w, x);
-      pbwtad *ps = malloc(nrow * sizeof *ps);
-      ps->a = malloc(nrow * sizeof *(ps->a));
-      pb[J - x] = ps;
-      memcpy(ps->a, pb[J - W - x]->a, nrow * sizeof *(ps->a));
-      rrsortx(nrow, w, ps->a, aux);
-
-      FREE(w);
-    }
-
-    SWAP(pw0, pw1);
-  }
-
-  c0 = malloc(nrow * sizeof *c0);
-  for (j = j * W; j < ncol; j++) {
-    fgetcoli(fin, j, nrow, c0, ncol);
-    pb[j] = cpbwt_0(nrow, c0, pb[j - 1]);
-  }
-
-  FREE(pw0);
-  FREE(pw1);
-  FREE(aux);
   FREE(c0);
   return pb;
 }
@@ -2258,35 +1663,35 @@ int main(int argc, char *argv[]) {
   }
 
 #if defined(BF2IOMODE_BM)
-if (strcmp(argv[1], "linear-syscall") == 0) {
-  TRACE(sblinc(fd, nrow, ncol), r);
-} else if (strcmp(argv[1], "linear-mmap") == 0) {
-  TRACE(mblinc(fd, nrow, ncol), r);
-} else if (strcmp(argv[1], "sample-syscall") == 0) {
-  TRACE(swbapproxc_rrs(fd, nrow, ncol), r);
-} else if (strcmp(argv[1], "sample-mmap") == 0) {
-  TRACE(mwbapproxc_rrs(fd, nrow, ncol), r);
-} else if (strcmp(argv[1], "blockpar-syscall") == 0) {
-  TRACE(sbwparc_rrs(fd, nrow, ncol), r);
-} else if (strcmp(argv[1], "blockpar-mmap") == 0) {
-  TRACE(mbwparc_rrs(fd, nrow, ncol), r);
-} else if (strcmp(argv[1], "stagpar-syscall") == 0) {
-  TRACE(swstagparc_rrs(argv[2], nrow, ncol), r);
-} else if (strcmp(argv[1], "stagpar-mmap") == 0) {
-  TRACE(mwstagparc_rrs(argv[2], nrow, ncol), r);
+  if (strcmp(argv[1], "linear-syscall") == 0) {
+    TRACE(sblinc(fd, nrow, ncol), r);
+  } else if (strcmp(argv[1], "linear-mmap") == 0) {
+    TRACE(mblinc(fd, nrow, ncol), r);
+  } else if (strcmp(argv[1], "sample-syscall") == 0) {
+    TRACE(swbapproxc_rrs(fd, nrow, ncol), r);
+  } else if (strcmp(argv[1], "sample-mmap") == 0) {
+    TRACE(mwbapproxc_rrs(fd, nrow, ncol), r);
+  } else if (strcmp(argv[1], "blockpar-syscall") == 0) {
+    TRACE(sbwparc_rrs(fd, nrow, ncol), r);
+  } else if (strcmp(argv[1], "blockpar-mmap") == 0) {
+    TRACE(mbwparc_rrs(fd, nrow, ncol), r);
+  } else if (strcmp(argv[1], "stagpar-syscall") == 0) {
+    TRACE(swstagparc_rrs(argv[2], nrow, ncol), r);
+  } else if (strcmp(argv[1], "stagpar-mmap") == 0) {
+    TRACE(mwstagparc_rrs(argv[2], nrow, ncol), r);
 #elif defined(BF2IOMODE_BCF)
-if (strcmp(argv[1], "linear") == 0) {
-  TRACE(linc(fin, nrow, ncol), r);
-} else if (strcmp(argv[1], "sampled") == 0) {
-  TRACE(wapproxc_rrs(fin, nrow, ncol), r);
-} else if (strcmp(argv[1], "blockpar") == 0) {
-  TRACE(wparc_rrs(fin, nrow, ncol), r);
-} else if (strcmp(argv[1], "stagpar") == 0) {
-  TRACE(wstagparc_rrs(argv[2], nrow, ncol), r);
+  if (strcmp(argv[1], "linear") == 0) {
+    TRACE(linc(fin, nrow, ncol), r);
+  } else if (strcmp(argv[1], "sampled") == 0) {
+    TRACE(wapproxc_rrs(fin, nrow, ncol), r);
+  } else if (strcmp(argv[1], "blockpar") == 0) {
+    TRACE(wparc_rrs(fin, nrow, ncol), r);
+  } else if (strcmp(argv[1], "stagpar") == 0) {
+    TRACE(wstagparc_rrs(argv[2], nrow, ncol), r);
 #endif
-}
+  }
 #if defined(BF2IOMODE_BCF)
-bcf_sr_destroy(sr);
+  bcf_sr_destroy(sr);
 #endif
-return EXIT_SUCCESS;
+  return EXIT_SUCCESS;
 }

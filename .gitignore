@@ -5,9 +5,7 @@
 *.o
 
 # executables
-bf-pbwt
-2bfpbwt-*
-2bfpbwt-bm
+sp-pbwt-*
 pgen
 gen
 

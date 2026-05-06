@@ -1,42 +1,37 @@
+# Sampled and Parallel Positional Burrows-Wheeler Transform
+
+## Install
+
 ```bash
+export LIBOMP=/path/to/lib
+export HTSLIB=/path/to/lib
+git clone https://github.com/msgr0/sp-pbwt.git
+cd sp-pbwt
 make
-
-#for parallel threads number use
-OMP_NUM_THREADS=N ./2bfpbwt prs panel.r10.c100000.txt
 ```
 
-Known issues:
-- Buffered version can (will) have issues when input have less column than buffer sizes
+## BCF input:
+Run `./sp-pbwt-bcf MODE FILE`, with one of the available modes:
 
-## BM (row X col) roadmap:
-- `spr`: needs optimization
+**Syscall**:
+- linear
+- sampled
+- blockpar
+- stagpar
 
-## BCF roadmap:
-- `lin`: implemented, needs checking
-- `bli`: implemented, needs checking
-- `bli[s|m]`: not relevant, should not be implemented
-- `ars`: implemented, needs checking
-- `bar`: not implemented
-- `bar[s|m]`: not relevant, should not be implemented
-- `prs`: implemented, needs checking
-- `bpr`: not relevant, should not be implemented
-- `spr`: not implemented, this is very tricky
+## BM input:
 
-## ENC (64bit encoding) roadmap:
-```bash
-xxx=ars
-./bcf2enc file.bcf file.em
-./2bfpbwt $xxx file.em
-```
+Run `./sp-pbwt-bm MODE FILE`, with one of the available modes:
 
-- `lin`: w.i.p.
-- `bli`: ?
-- `blis`: not relevant (?)
-- `blim`: not relevant (?)
-- `ars`: implemented, check last computation of last window
-- `bar`: ?
-- `bars`: not relevant (?)
-- `barm`: not relevant (?)
-- `prs`: w.i.p.
-- `bpr`: ?
-- `spr`: ?
+**Syscall**:
+- linear-syscall
+- sampled-syscall
+- blockpar-syscall
+- stagpar-syscall
+
+**Memory Mapping**:
+- linear-mmap
+- sampled-mmap
+- blockpar-mmap
+- stagpar-mmap
+

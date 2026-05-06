@@ -1,5 +1,6 @@
 // vim:ft=c
 #include "io.h"
+#include <stdint.h>
 #include <string.h>
 
 #define RCBUFSIZE 8192
@@ -122,6 +123,13 @@ void sbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
     buf = malloc(BFGETCOLI_BUF_SIZE * n * sizeof *buf);
 
   size_t offset = i;
+
+  // resetting offsets
+  // if (__builtin_expect(nc == 0, 0)) {
+  //   bufn = BFGETCOLI_BUF_SIZE;
+  //   i = n;
+  //   return;
+  // }
   if (bufn == BFGETCOLI_BUF_SIZE) {
     /*#pragma omp parallel for*/
     for (size_t r = 0; r < n; r++) {
@@ -151,7 +159,7 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
     buf = malloc(BFGETCOLI_BUF_SIZE * n * sizeof *buf);
 
   static uint8_t *fdmm = NULL;
-  if (!fdmm) {
+  if (__builtin_expect(!fdmm, 0)) {
     struct stat st;
     if (fstat(fd, &st) < 0) {
       perror("fstat");
@@ -165,6 +173,12 @@ void mbfgetcoln(int fd, size_t n, uint8_t *restrict c, size_t nc) {
   }
 
   size_t offset = i;
+  // resetting offsets
+  // if (__builtin_expect(nc == 0, 0)) {
+  //   bufn = BFGETCOLI_BUF_SIZE;
+  //   i = n;
+  //   return;
+  // }
   if (bufn == BFGETCOLI_BUF_SIZE) {
     /*#pragma omp parallel for*/
     for (size_t r = 0; r < n; r++) {
@@ -462,7 +476,7 @@ void sbfgetcolwgrn(int fd, size_t n, uint64_t *restrict c, size_t nc,
 }
 
 int fgetcolwgri(void *fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
-                 uint8_t w) {
+                uint8_t w) {
   // NOTE: this assumes ASCII text file, offset are computed assuming
   // 1-byte size for each character
   uint64_t x;
@@ -499,5 +513,41 @@ void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
     }
     /*printf(")=%llu\n", c[r]);*/
     lseek(fd, nc - w + 1, SEEK_CUR);
+  }
+}
+
+void spfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                  uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+  uint64_t x;
+  uint8_t buf[64];
+  off_t offset = i;
+
+  for (size_t r = 0; r < n; r++) {
+    c[r] = 0;
+    pread(fd, buf, w, offset);
+    for (size_t s = 0; s < w; s++) {
+      x = buf[s] - 48;
+      c[r] = (x << s) | c[r];
+    }
+    /*printf(")=%llu\n", c[r]);*/
+    offset += (nc + 1);
+  }
+}
+void fgetcolwgri_mmap(uint8_t *fdmm, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                  uint8_t w) {
+  // NOTE: this assumes ASCII text file, offset are computed assuming
+  // 1-byte size for each character
+  uint64_t x;
+  off_t offset = i;
+
+  for (size_t r = 0; r < n; r++) {
+    c[r] = 0;
+    for (size_t s = 0; s < w; s++) {
+      x = fdmm[offset + s] - 48;
+      c[r] = (x << s) | c[r];
+    }
+    offset += (nc + 1);
   }
 }

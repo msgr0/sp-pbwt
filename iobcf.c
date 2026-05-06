@@ -330,3 +330,13 @@ void sfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
   fputs("\e[0;33mMode not used for this type of file. Exiting.\e[0m\n", stderr);
   exit(IOBCF_UNUSED_EXITCODE);
 }
+void spfgetcolwgri(int fd, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                  uint8_t w) {
+  fputs("\e[0;33mMode not used for this type of file. Exiting.\e[0m\n", stderr);
+  exit(IOBCF_UNUSED_EXITCODE);
+}
+void fgetcolwgri_mmap(uint8_t *fdmm, size_t i, size_t n, uint64_t *restrict c, size_t nc,
+                  uint8_t w) {
+  fputs("\e[0;33mMode not used for this type of file. Exiting.\e[0m\n", stderr);
+  exit(IOBCF_UNUSED_EXITCODE);
+}
